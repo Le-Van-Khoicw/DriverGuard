@@ -1,0 +1,24 @@
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+
+# Signing keys and secrets
+*.jks
+*.keystore
+.env
+
+# Python
+__pycache__/
+.venv/
+*.pyc
+
+# Web
+node_modules/
+dist/
+
+# Local uploads and databases
+uploads/
+*.db

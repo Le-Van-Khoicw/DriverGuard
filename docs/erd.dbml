@@ -1,0 +1,73 @@
+// ERD trung tâm của DriverGuard.
+
+Table users {
+  id char(36) [pk]
+  username varchar(100) [unique, not null]
+  password_hash varchar(255) [not null]
+  full_name varchar(150) [not null]
+  role varchar(30) [not null]
+  is_active boolean [not null]
+  created_at datetime [not null]
+  updated_at datetime [not null]
+}
+
+Table devices {
+  id char(36) [pk]
+  device_code varchar(100) [unique, not null]
+  device_name varchar(150) [not null]
+  device_type varchar(50) [not null]
+  status varchar(30) [not null]
+  last_seen_at datetime
+  created_at datetime [not null]
+  updated_at datetime [not null]
+}
+
+Table device_bindings {
+  id char(36) [pk]
+  user_id char(36) [not null]
+  device_id char(36) [not null]
+  status varchar(30) [not null]
+  bound_at datetime [not null]
+  unbound_at datetime
+}
+
+Table monitoring_sessions {
+  id char(36) [pk]
+  user_id char(36) [not null]
+  device_id char(36) [not null]
+  vehicle_id char(36)
+  status varchar(30) [not null]
+  started_at datetime [not null]
+  ended_at datetime
+  created_at datetime [not null]
+}
+
+Table vehicles {
+  id char(36) [pk]
+  user_id char(36) [not null]
+  display_name varchar(150) [not null]
+  license_plate varchar(30)
+  vehicle_type varchar(50)
+  created_at datetime [not null]
+  updated_at datetime [not null]
+}
+
+Table drowsiness_events {
+  id char(36) [pk]
+  session_id char(36) [not null]
+  event_type varchar(50) [not null]
+  ear decimal(6,4)
+  confidence decimal(6,4)
+  closed_duration_ms int
+  image_url varchar(500)
+  source varchar(50) [not null]
+  occurred_at datetime [not null]
+  created_at datetime [not null]
+}
+
+Ref: device_bindings.user_id > users.id
+Ref: device_bindings.device_id > devices.id
+Ref: monitoring_sessions.user_id > users.id
+Ref: monitoring_sessions.device_id > devices.id
+Ref: monitoring_sessions.vehicle_id > vehicles.id
+Ref: drowsiness_events.session_id > monitoring_sessions.id
