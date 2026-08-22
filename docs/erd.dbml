@@ -1,57 +1,61 @@
 // ERD trung tâm của DriverGuard.
-
+// v2 - cập nhật khớp với thiết kế thống nhất (bổ sung field + bảng còn thiếu so với v1)
+ 
 Table users {
   id char(36) [pk]
-  username varchar(100) [unique, not null]
-  password_hash varchar(255) [not null]
+  username varchar(100) [unique] // null với driver, dùng để admin đăng nhập web
+  phone varchar(20) [unique] // dùng để định danh driver, null với admin nếu không cần
+  password_hash varchar(255) // null với driver vì driver không đăng nhập web
   full_name varchar(150) [not null]
-  role varchar(30) [not null]
-  is_active boolean [not null]
+  role varchar(30) [not null] // admin | driver
+  is_active boolean [not null, default: true]
   created_at datetime [not null]
   updated_at datetime [not null]
 }
-
+ 
 Table devices {
   id char(36) [pk]
   device_code varchar(100) [unique, not null]
   device_name varchar(150) [not null]
   device_type varchar(50) [not null]
-  status varchar(30) [not null]
+  status varchar(30) [not null] // online | offline | locked
+  firmware_version varchar(50)
+  ai_model_version varchar(50)
   last_seen_at datetime
   created_at datetime [not null]
   updated_at datetime [not null]
 }
-
+ 
 Table device_bindings {
   id char(36) [pk]
   user_id char(36) [not null]
   device_id char(36) [not null]
-  status varchar(30) [not null]
+  status varchar(30) [not null] // active | ended
   bound_at datetime [not null]
   unbound_at datetime
 }
-
+ 
 Table monitoring_sessions {
   id char(36) [pk]
   user_id char(36) [not null]
   device_id char(36) [not null]
-  vehicle_id char(36)
-  status varchar(30) [not null]
+  vehicle_id char(36) // nullable, driver có thể không khai báo phương tiện
+  status varchar(30) [not null] // active | ended
   started_at datetime [not null]
   ended_at datetime
   created_at datetime [not null]
 }
-
+ 
 Table vehicles {
   id char(36) [pk]
   user_id char(36) [not null]
   display_name varchar(150) [not null]
   license_plate varchar(30)
-  vehicle_type varchar(50)
+  vehicle_type varchar(50) // motorbike | car | truck | bus
   created_at datetime [not null]
   updated_at datetime [not null]
 }
-
+ 
 Table drowsiness_events {
   id char(36) [pk]
   session_id char(36) [not null]
@@ -60,14 +64,48 @@ Table drowsiness_events {
   confidence decimal(6,4)
   closed_duration_ms int
   image_url varchar(500)
-  source varchar(50) [not null]
+  source varchar(50) [not null] // ANDROID | EDGE_DEVICE
   occurred_at datetime [not null]
+  status varchar(30) [not null, default: 'NEW'] // NEW | ACKNOWLEDGED | RESOLVED
+  handled_by char(36) // ref: users.id, null nếu chưa xử lý
+  note text
   created_at datetime [not null]
 }
-
+ 
+Table detection_settings {
+  id char(36) [pk]
+  device_id char(36) // null = cấu hình mặc định toàn hệ thống, có giá trị = override riêng thiết bị
+  ear_threshold decimal(6,4) [not null]
+  confidence_threshold decimal(6,4) [not null]
+  closed_duration_threshold_ms int [not null]
+  updated_at datetime [not null]
+}
+ 
+Table device_health {
+  id char(36) [pk]
+  device_id char(36) [not null]
+  status varchar(30) [not null] // connected | disconnected | warning
+  last_heartbeat_at datetime
+  note varchar(255)
+  created_at datetime [not null]
+}
+ 
+Table audit_logs {
+  id char(36) [pk]
+  admin_id char(36) [not null]
+  action varchar(100) [not null]
+  target_table varchar(100) [not null]
+  target_id char(36)
+  before_value json
+  after_value json
+  created_at datetime [not null]
+}
+ 
 Ref: device_bindings.user_id > users.id
 Ref: device_bindings.device_id > devices.id
 Ref: monitoring_sessions.user_id > users.id
 Ref: monitoring_sessions.device_id > devices.id
 Ref: monitoring_sessions.vehicle_id > vehicles.id
+Ref: vehicles.user_id > users.id
 Ref: drowsiness_events.session_id > monitoring_sessions.id
+Ref: drowsiness_events.handled_by > users.id
