@@ -1,9 +1,10 @@
-# API Contract v1
+# API Contract v2
 
-> **Tóm tắt các thay đổi**: bổ sung Auth, Monitoring Sessions (bắt buộc phải mở session trước khi gửi event),
-> cập nhật Drowsiness Events để khớp với luồng xử lý cảnh báo (status/handled_by/note).
-> Các endpoint còn lại (users, devices, device_bindings, vehicles, detection_settings, device_health,
-> dashboard, global_search, reports, audit_logs) sẽ được bổ sung khi Backend triển khai từng module.
+Backend là nơi duy nhất truy cập MySQL. Mobile và Web chỉ gọi API.
+
+> **Thay đổi so với v1**: bổ sung Users, Devices, Device Bindings, Vehicles.
+> Auth chuyển từ email sang username. Các endpoint còn lại (detection_settings, device_health,
+> dashboard, global_search, reports, audit_logs) sẽ được bổ sung khi Backend triển khai tiếp.
 
 ---
 
@@ -11,164 +12,194 @@
 
 ### Đăng nhập (Admin)
 
-`POST /api/auth/login`
+`POST /api/v1/auth/login`
 
-Request:
-{
-  "username": "admin01",
-  "password": "your_password"
-}
+Request (form-urlencoded, theo chuẩn OAuth2PasswordRequestForm):
+username=admin
+password=your_password
+
 
 Response:
+```json
 {
   "accessToken": "eyJhbGciOi...",
-  "tokenType": "bearer",
-  "expiresIn": 3600
+  "tokenType": "bearer"
 }
+```
 
-Mọi endpoint bên dưới (trừ endpoint Edge/Mobile gửi dữ liệu giám sát) yêu cầu header:
+Mọi endpoint bên dưới (trừ endpoint Edge/Mobile gửi dữ liệu giám sát, nếu có) yêu cầu header:
 Authorization: Bearer <accessToken>
+
+---
+
+## Users
+
+### Danh sách tài khoản
+
+`GET /api/v1/users?role=driver`
+
+### Xem chi tiết
+
+`GET /api/v1/users/{id}`
+
+### Tạo tài khoản
+
+`POST /api/v1/users`
+
+Request:
+```json
+{
+  "full_name": "Nguyễn Văn A",
+  "phone": "0901234567",
+  "username": null,
+  "role": "driver",
+  "is_active": true,
+  "password": null
+}
+```
+Lưu ý: `role = "admin"` bắt buộc phải có `password`. `role = "driver"` nên để `username`/`password` là `null`.
+
+### Cập nhật (đổi tên, khóa/mở khóa)
+
+`PATCH /api/v1/users/{id}`
+```json
+{
+  "full_name": "Nguyễn Văn A (đã cập nhật)",
+  "is_active": false
+}
+```
+
+---
+
+## Devices
+
+### Danh sách thiết bị
+
+`GET /api/v1/devices?status=online`
+
+### Xem chi tiết
+
+`GET /api/v1/devices/{id}`
+
+### Thêm thiết bị (bằng mã kích hoạt/QR)
+
+`POST /api/v1/devices`
+```json
+{
+  "deviceCode": "CAM-001",
+  "deviceName": "Camera xe 51F-12345",
+  "deviceType": "dashcam"
+}
+```
+
+### Cập nhật (đổi tên, khóa/mở khóa)
+
+`PATCH /api/v1/devices/{id}`
+```json
+{
+  "deviceName": "Camera xe 51F-12345 (mới)",
+  "status": "locked"
+}
+```
+`status` nhận: `online`, `offline`, `locked`.
+
+---
+
+## Device Bindings
+
+Quan hệ camera – tài khoản theo thời gian. **Mỗi thiết bị tại 1 thời điểm chỉ có tối đa 1 binding `active`** — khi gán thiết bị đã có chủ cho tài khoản khác, backend tự đóng binding cũ (`status → ended`, `unboundAt` = thời điểm gán mới), không cần unbind thủ công trước.
+
+### Danh sách / lịch sử gán
+
+`GET /api/v1/device-bindings?device_id=...&user_id=...&status=active`
+
+### Gán thiết bị cho tài khoản
+
+`POST /api/v1/device-bindings`
+```json
+{
+  "userId": "b3f1c2a0-...",
+  "deviceId": "d9e4f0b1-..."
+}
+```
+
+Response:
+```json
+{
+  "id": "9c1a2b3d-...",
+  "userId": "b3f1c2a0-...",
+  "deviceId": "d9e4f0b1-...",
+  "status": "active",
+  "boundAt": "2026-08-22T10:00:00",
+  "unboundAt": null
+}
+```
+
+### Hủy gán
+
+`PATCH /api/v1/device-bindings/{id}/unbind`
+
+Response: bản ghi với `status: "ended"`, `unboundAt` có giá trị.
+
+---
+
+## Vehicles
+
+Thông tin phương tiện, thuộc về 1 tài khoản, tùy chọn khai báo.
+
+### Danh sách
+
+`GET /api/v1/vehicles?user_id=...`
+
+### Xem chi tiết
+
+`GET /api/v1/vehicles/{id}`
+
+### Tạo
+
+`POST /api/v1/vehicles`
+```json
+{
+  "userId": "b3f1c2a0-...",
+  "displayName": "Xe máy đi làm",
+  "licensePlate": "51F-12345",
+  "vehicleType": "motorbike"
+}
+```
+`vehicleType` nhận: `motorbike`, `car`, `truck`, `bus`.
+
+### Cập nhật
+
+`PATCH /api/v1/vehicles/{id}`
+```json
+{
+  "licensePlate": "51F-99999"
+}
+```
+
+### Xóa
+
+`DELETE /api/v1/vehicles/{id}` → trả về `204 No Content`.
 
 ---
 
 ## Monitoring Sessions
 
-### Mở phiên giám sát
-
-`POST /api/monitoring-sessions`
-
-Gọi khi camera được bật lên. Trả về `sessionId` (UUID thật) để dùng cho các event tiếp theo — **không tự sinh chuỗi tùy ý ở client**.
-
-Request:
-{
-  "userId": "b3f1c2a0-...",
-  "deviceId": "d9e4f0b1-...",
-  "vehicleId": null,
-  "startedAt": "2026-08-20T19:00:00+07:00"
-}
-
-Response:
-{
-  "id": "9c1a2b3d-...",
-  "status": "active",
-  "startedAt": "2026-08-20T19:00:00+07:00"
-}
-
-### Kết thúc phiên giám sát
-
-`PATCH /api/monitoring-sessions/{id}/end`
-
-Request:
-{
-  "endedAt": "2026-08-20T20:15:00+07:00"
-}
-
-Response:
-{
-  "id": "9c1a2b3d-...",
-  "status": "ended",
-  "endedAt": "2026-08-20T20:15:00+07:00"
-}
-
----
+*(giữ nguyên như v1 — xem tài liệu trước, không lặp lại ở đây)*
 
 ## Drowsiness Events
 
-### Tạo cảnh báo
-
-`POST /api/drowsiness-events`
-
-`sessionId` phải là UUID hợp lệ trả về từ `POST /api/monitoring-sessions`.
-
-Request:
-{
-  "sessionId": "9c1a2b3d-...",
-  "eventType": "DROWSINESS",
-  "ear": 0.18,
-  "confidence": 0.91,
-  "closedDurationMs": 1800,
-  "imageUrl": "https://.../evidence/xxxx.jpg",
-  "source": "ANDROID",
-  "occurredAt": "2026-08-20T19:30:00+07:00"
-}
-
-Response: bản ghi vừa tạo, `status` mặc định `"NEW"`, `handledBy` và `note` là `null`.
-{
-  "id": "e7f2a1c0-...",
-  "sessionId": "9c1a2b3d-...",
-  "eventType": "DROWSINESS",
-  "ear": 0.18,
-  "confidence": 0.91,
-  "closedDurationMs": 1800,
-  "imageUrl": "https://.../evidence/xxxx.jpg",
-  "source": "ANDROID",
-  "occurredAt": "2026-08-20T19:30:00+07:00",
-  "status": "NEW",
-  "handledBy": null,
-  "note": null
-}
-
-### Lấy lịch sử cảnh báo
-
-`GET /api/drowsiness-events`
-
-Query params: `from`, `to`, `deviceId`, `userId`, `vehicleId`, `status`, `page`, `pageSize`.
-
-Response:
-{
-  "items": [
-    {
-      "id": "e7f2a1c0-...",
-      "sessionId": "9c1a2b3d-...",
-      "eventType": "DROWSINESS",
-      "ear": 0.18,
-      "confidence": 0.91,
-      "closedDurationMs": 1800,
-      "imageUrl": "https://.../evidence/xxxx.jpg",
-      "occurredAt": "2026-08-20T19:30:00+07:00",
-      "status": "NEW",
-      "handledBy": null,
-      "note": null
-    }
-  ],
-  "total": 1,
-  "page": 1,
-  "pageSize": 20
-}
-
-### Xử lý cảnh báo (chỉ Admin)
-
-`PATCH /api/drowsiness-events/{id}/status`
-
-Request:
-{
-  "status": "ACKNOWLEDGED",
-  "note": "Đã xác nhận, theo dõi thêm"
-}
-
-`status` nhận 1 trong: `NEW`, `ACKNOWLEDGED`, `RESOLVED`. `handledBy` được backend tự gán từ token admin đang đăng nhập, client không truyền lên.
-
-Response:
-{
-  "id": "e7f2a1c0-...",
-  "status": "ACKNOWLEDGED",
-  "handledBy": "b3f1c2a0-...",
-  "note": "Đã xác nhận, theo dõi thêm"
-}
+*(giữ nguyên như v1 — xem tài liệu trước, không lặp lại ở đây)*
 
 ---
 
 ## Các endpoint còn thiếu, sẽ bổ sung theo tiến độ Backend
 
-- `GET/POST/PATCH /api/users`
-- `GET/POST/PATCH /api/devices`
-- `POST /api/device-bindings`, `PATCH /api/device-bindings/{id}/unbind`
-- `GET/POST/PATCH/DELETE /api/vehicles`
-- `GET/PATCH /api/detection-settings`
-- `POST /api/device-health/heartbeat`, `GET /api/device-health`
-- `GET /api/dashboard/summary`
-- `GET /api/search?q=...`
-- `GET /api/reports/export`
-- `GET /api/audit-logs`
+- `GET/PATCH /api/v1/detection-settings`
+- `POST /api/v1/device-health/heartbeat`, `GET /api/v1/device-health`
+- `GET /api/v1/dashboard/summary`
+- `GET /api/v1/search?q=...`
+- `GET /api/v1/reports/export`
+- `GET /api/v1/audit-logs`
 
 Contract này sẽ tiếp tục cập nhật khi Backend triển khai từng module.
