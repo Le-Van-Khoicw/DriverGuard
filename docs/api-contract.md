@@ -1,10 +1,13 @@
-# API Contract v2
+# API Contract v3
 
 Backend là nơi duy nhất truy cập MySQL. Mobile và Web chỉ gọi API.
 
-> **Thay đổi so với v1**: bổ sung Users, Devices, Device Bindings, Vehicles.
-> Auth chuyển từ email sang username. Các endpoint còn lại (detection_settings, device_health,
-> dashboard, global_search, reports, audit_logs) sẽ được bổ sung khi Backend triển khai tiếp.
+> **Thay đổi so với v2**: bổ sung Detection Settings, Device Health.
+> Lưu ý bảo mật: 2 endpoint `GET /detection-settings/effective` và `POST /device-health/heartbeat`
+> hiện KHÔNG yêu cầu token admin (dành cho Edge gọi trực tiếp), và hệ thống CHƯA có cơ chế xác thực
+> thiết bị riêng — sẽ bổ sung device authentication (device secret/API key) trước khi lên production.
+> Các endpoint còn lại (dashboard, global_search, reports, audit_logs) sẽ được bổ sung khi Backend
+> triển khai tiếp.
 
 ---
 
@@ -27,8 +30,9 @@ Response:
 }
 ```
 
-Mọi endpoint bên dưới (trừ endpoint Edge/Mobile gửi dữ liệu giám sát, nếu có) yêu cầu header:
+Mọi endpoint bên dưới (trừ endpoint dành riêng cho Edge, có ghi chú cụ thể) yêu cầu header:
 Authorization: Bearer <accessToken>
+
 
 ---
 
@@ -193,10 +197,97 @@ Thông tin phương tiện, thuộc về 1 tài khoản, tùy chọn khai báo.
 
 ---
 
+## Detection Settings
+
+Ngưỡng cấu hình để AI xác định buồn ngủ. Có thể set mặc định toàn hệ thống (`deviceId = null`) hoặc override riêng theo từng thiết bị.
+
+### Danh sách toàn bộ cấu hình
+
+`GET /api/v1/detection-settings` *(yêu cầu admin)*
+
+### Lấy ngưỡng đang áp dụng cho 1 thiết bị
+
+`GET /api/v1/detection-settings/effective?device_id=...`
+
+**Không yêu cầu token admin** — dùng cho Edge tự đồng bộ ngưỡng định kỳ. Ưu tiên trả về override riêng của thiết bị, nếu không có thì trả về cấu hình mặc định toàn hệ thống.
+
+Response:
+```json
+{
+  "id": "f1a2b3c4-...",
+  "deviceId": null,
+  "earThreshold": 0.2,
+  "confidenceThreshold": 0.85,
+  "closedDurationThresholdMs": 1500,
+  "updatedAt": "2026-08-22T10:00:00"
+}
+```
+
+### Tạo/cập nhật cấu hình (upsert)
+
+`POST /api/v1/detection-settings` *(yêu cầu admin)*
+
+```json
+{
+  "deviceId": null,
+  "earThreshold": 0.2,
+  "confidenceThreshold": 0.85,
+  "closedDurationThresholdMs": 1500
+}
+```
+Nếu `deviceId` (hoặc cấu hình global khi `deviceId = null`) đã tồn tại, API tự động cập nhật thay vì tạo bản ghi trùng.
+
+### Cập nhật theo id
+
+`PATCH /api/v1/detection-settings/{id}` *(yêu cầu admin)*
+
+```json
+{
+  "earThreshold": 0.22
+}
+```
+
+---
+
+## Device Health
+
+Trạng thái kết nối thiết bị, tách biệt với `drowsiness_events`.
+
+### Gửi heartbeat
+
+`POST /api/v1/device-health/heartbeat`
+
+**Không yêu cầu token admin** — gọi trực tiếp bởi Edge/thiết bị. Đồng thời tự cập nhật `devices.status` và `devices.last_seen_at`.
+
+```json
+{
+  "deviceCode": "CAM-001",
+  "status": "connected",
+  "note": null
+}
+```
+`status` nhận: `connected`, `warning`.
+
+Response:
+```json
+{
+  "id": "a1b2c3d4-...",
+  "deviceId": "d9e4f0b1-...",
+  "status": "connected",
+  "lastHeartbeatAt": "2026-08-22T10:00:00",
+  "note": null,
+  "createdAt": "2026-08-22T10:00:00"
+}
+```
+
+### Lịch sử heartbeat
+
+`GET /api/v1/device-health?device_id=...` *(yêu cầu admin, trả tối đa 100 bản ghi gần nhất)*
+
+---
+
 ## Các endpoint còn thiếu, sẽ bổ sung theo tiến độ Backend
 
-- `GET/PATCH /api/v1/detection-settings`
-- `POST /api/v1/device-health/heartbeat`, `GET /api/v1/device-health`
 - `GET /api/v1/dashboard/summary`
 - `GET /api/v1/search?q=...`
 - `GET /api/v1/reports/export`
