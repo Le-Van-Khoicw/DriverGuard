@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.v1 import auth, users, devices, device_bindings, vehicles, monitoring_sessions, drowsiness_events, detection_settings, device_health, dashboard
+from app.api.v1 import auth, users, devices, device_bindings, vehicles, monitoring_sessions, drowsiness_events, detection_settings, device_health, dashboard, global_search
 
 app = FastAPI(title="Driver Drowsiness Admin API")
 
@@ -13,3 +13,4 @@ app.include_router(drowsiness_events.router, prefix="/api/v1")
 app.include_router(detection_settings.router, prefix="/api/v1")
 app.include_router(device_health.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
+app.include_router(global_search.router, prefix="/api/v1")
