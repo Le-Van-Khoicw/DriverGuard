@@ -6,6 +6,7 @@ from app.db.session import get_db
 from app.api.deps import get_current_admin
 from app.models.device import Device
 from app.schemas.device import DeviceCreate, DeviceUpdate, DeviceOut
+from app.services.audit import log_action
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -85,6 +86,8 @@ def update_device(
     if not device:
         raise HTTPException(status_code=404, detail="Không tìm thấy thiết bị")
 
+    before = {"deviceName": device.device_name, "status": device.status}
+
     if payload.deviceName is not None:
         device.device_name = payload.deviceName
     if payload.status is not None:
@@ -92,4 +95,11 @@ def update_device(
 
     db.commit()
     db.refresh(device)
+
+    log_action(
+        db, admin_id=current_admin.id, action="update_device",
+        target_table="devices", target_id=device.id,
+        before_value=before,
+        after_value={"deviceName": device.device_name, "status": device.status},
+    )
     return _to_out(device)
