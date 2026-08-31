@@ -7,6 +7,7 @@ from app.api.deps import get_current_admin
 from app.models.vehicle import Vehicle
 from app.models.user import User
 from app.schemas.vehicle import VehicleCreate, VehicleUpdate, VehicleOut
+from app.services.audit import log_action
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
@@ -67,6 +68,17 @@ def create_vehicle(
     db.add(vehicle)
     db.commit()
     db.refresh(vehicle)
+
+    log_action(
+        db, admin_id=current_admin.id, action="create_vehicle",
+        target_table="vehicles", target_id=vehicle.id,
+        before_value=None,
+        after_value={
+            "displayName": vehicle.display_name,
+            "licensePlate": vehicle.license_plate,
+            "vehicleType": vehicle.vehicle_type,
+        },
+    )
     return _to_out(vehicle)
 
 
@@ -81,6 +93,12 @@ def update_vehicle(
     if not vehicle:
         raise HTTPException(status_code=404, detail="Không tìm thấy phương tiện")
 
+    before = {
+        "displayName": vehicle.display_name,
+        "licensePlate": vehicle.license_plate,
+        "vehicleType": vehicle.vehicle_type,
+    }
+
     if payload.displayName is not None:
         vehicle.display_name = payload.displayName
     if payload.licensePlate is not None:
@@ -90,6 +108,17 @@ def update_vehicle(
 
     db.commit()
     db.refresh(vehicle)
+
+    log_action(
+        db, admin_id=current_admin.id, action="update_vehicle",
+        target_table="vehicles", target_id=vehicle.id,
+        before_value=before,
+        after_value={
+            "displayName": vehicle.display_name,
+            "licensePlate": vehicle.license_plate,
+            "vehicleType": vehicle.vehicle_type,
+        },
+    )
     return _to_out(vehicle)
 
 
@@ -99,10 +128,25 @@ def delete_vehicle(
     db: Session = Depends(get_db),
     current_admin=Depends(get_current_admin),
 ):
-    """Vehicles cho phép xóa cứng (khác users/devices) vì không phải entity trung tâm bị tham chiếu nhiều."""
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(status_code=404, detail="Không tìm thấy phương tiện")
+
+    before = {
+        "displayName": vehicle.display_name,
+        "licensePlate": vehicle.license_plate,
+        "vehicleType": vehicle.vehicle_type,
+        "userId": vehicle.user_id,
+    }
+    vehicle_id_copy = vehicle.id  # lưu lại trước khi object bị xóa khỏi session
+
     db.delete(vehicle)
     db.commit()
+
+    log_action(
+        db, admin_id=current_admin.id, action="delete_vehicle",
+        target_table="vehicles", target_id=vehicle_id_copy,
+        before_value=before,
+        after_value=None,
+    )
     return None
