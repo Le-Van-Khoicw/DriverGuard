@@ -9,6 +9,7 @@ from app.models.device_binding import DeviceBinding
 from app.models.user import User
 from app.models.device import Device
 from app.schemas.device_binding import DeviceBindingCreate, DeviceBindingOut
+from app.services.audit import log_action
 
 router = APIRouter(prefix="/device-bindings", tags=["device-bindings"])
 
@@ -49,7 +50,6 @@ def create_binding(
     db: Session = Depends(get_db),
     current_admin=Depends(get_current_admin),
 ):
-    """Gán 1 camera cho 1 tài xế. Tự động hủy binding active cũ của camera đó (nếu có)."""
     user = db.query(User).filter(User.id == payload.userId).first()
     if not user:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản")
@@ -58,12 +58,14 @@ def create_binding(
     if not device:
         raise HTTPException(status_code=404, detail="Không tìm thấy thiết bị")
 
-    # đóng binding active cũ của thiết bị này (nếu có) trước khi gán chủ mới
     old_binding = db.query(DeviceBinding).filter(
         DeviceBinding.device_id == payload.deviceId,
         DeviceBinding.status == "active",
     ).first()
+
+    old_binding_before = None
     if old_binding:
+        old_binding_before = {"userId": old_binding.user_id, "status": old_binding.status}
         old_binding.status = "ended"
         old_binding.unbound_at = datetime.utcnow()
 
@@ -76,6 +78,22 @@ def create_binding(
     db.add(new_binding)
     db.commit()
     db.refresh(new_binding)
+
+    if old_binding:
+        log_action(
+            db, admin_id=current_admin.id, action="auto_unbind_device",
+            target_table="device_bindings", target_id=old_binding.id,
+            before_value=old_binding_before,
+            after_value={"userId": old_binding.user_id, "status": old_binding.status},
+        )
+
+    log_action(
+        db, admin_id=current_admin.id, action="create_binding",
+        target_table="device_bindings", target_id=new_binding.id,
+        before_value=None,
+        after_value={"userId": new_binding.user_id, "deviceId": new_binding.device_id, "status": new_binding.status},
+    )
+
     return _to_out(new_binding)
 
 
@@ -91,8 +109,17 @@ def unbind_device(
     if binding.status == "ended":
         raise HTTPException(status_code=400, detail="Bản ghi này đã được hủy gán trước đó")
 
+    before = {"status": binding.status, "unboundAt": binding.unbound_at}
+
     binding.status = "ended"
     binding.unbound_at = datetime.utcnow()
     db.commit()
     db.refresh(binding)
+
+    log_action(
+        db, admin_id=current_admin.id, action="unbind_device",
+        target_table="device_bindings", target_id=binding.id,
+        before_value={"status": before["status"], "unboundAt": str(before["unboundAt"])},
+        after_value={"status": binding.status, "unboundAt": str(binding.unbound_at)},
+    )
     return _to_out(binding)
