@@ -94,7 +94,20 @@ Mobile đang có màn hình giám sát giả lập theo MVVM. CameraX, AI, Backe
 
    > Dự án dùng Alembic để quản lý migration, phải chạy thêm lệnh: `alembic upgrade head`
 
-7. **Chạy server**
+7. ## Seed dữ liệu ban đầu
+
+Sau khi chạy migration xong, tạo tài khoản admin đầu tiên để đăng nhập:
+
+```bash
+python scripts/seed_admin.py
+```
+
+Mặc định tạo tài khoản `admin` / `admin123`. Muốn đổi giá trị, thêm vào `.env`:
+SEED_ADMIN_USERNAME=admin
+SEED_ADMIN_PASSWORD=<your_password>
+SEED_ADMIN_FULL_NAME=Quản trị viên
+
+8. **Chạy server**
 
 ```bash
    uvicorn app.main:app --reload
