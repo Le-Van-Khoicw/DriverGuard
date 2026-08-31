@@ -11,6 +11,17 @@ from app.services.audit import log_action
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+def _to_out(u: User) -> UserOut:
+    return UserOut(
+        id=u.id,
+        username=u.username,
+        phone=u.phone,
+        fullName=u.full_name,
+        role=u.role,
+        isActive=u.is_active,
+        createdAt=u.created_at,
+        updatedAt=u.updated_at,
+    )
 
 @router.get("", response_model=list[UserOut])
 def list_users(
@@ -21,7 +32,8 @@ def list_users(
     query = db.query(User)
     if role:
         query = query.filter(User.role == role)
-    return query.order_by(User.created_at.desc()).all()
+    users = query.order_by(User.created_at.desc()).all()
+    return [_to_out(u) for u in users]
 
 
 @router.get("/{user_id}", response_model=UserOut)
@@ -33,7 +45,7 @@ def get_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản")
-    return user
+    return _to_out(user)
 
 
 @router.post("", response_model=UserOut)
@@ -66,7 +78,7 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
-    return user
+    return _to_out(user)
 
 
 @router.patch("/{user_id}", response_model=UserOut)
@@ -91,7 +103,7 @@ def update_user(
     if payload.phone is not None:
         user.phone = payload.phone
     if payload.is_active is not None:
-        user.is_active = payload.is_active  # dùng để khóa/mở khóa tài khoản
+        user.is_active = payload.is_active
 
     db.commit()
     db.refresh(user)
@@ -106,4 +118,4 @@ def update_user(
             "is_active": user.is_active,
         },
     )
-    return user
+    return _to_out(user)
