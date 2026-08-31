@@ -1,18 +1,18 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel
 
 
 class UserBase(BaseModel):
     full_name: str
     phone: Optional[str] = None
-    username: Optional[str] = None  # null với driver
-    role: str  # admin | driver
+    username: Optional[str] = None
+    role: Literal["admin", "driver"]
     is_active: bool = True
 
 
 class UserCreate(UserBase):
-    password: Optional[str] = None  # bắt buộc nếu role = admin, bỏ trống nếu role = driver
+    password: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
@@ -25,11 +25,11 @@ class UserOut(BaseModel):
     id: str
     username: Optional[str]
     phone: Optional[str]
-    full_name: str
+    fullName: str
     role: str
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
+    isActive: bool
+    createdAt: datetime
+    updatedAt: datetime
 
     class Config:
         from_attributes = True
