@@ -7,6 +7,7 @@ from app.api.deps import get_current_admin
 from app.models.user import User
 from app.core.security import hash_password
 from app.schemas.user import UserCreate, UserUpdate, UserOut
+from app.services.audit import log_action
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -78,6 +79,12 @@ def update_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài khoản")
+    
+    before = {
+        "full_name": user.full_name,
+        "phone": user.phone,
+        "is_active": user.is_active,
+    }
 
     if payload.full_name is not None:
         user.full_name = payload.full_name
@@ -88,4 +95,15 @@ def update_user(
 
     db.commit()
     db.refresh(user)
+
+    log_action(
+        db, admin_id=current_admin.id, action="update_user",
+        target_table="users", target_id=user.id,
+        before_value=before,
+        after_value={
+            "full_name": user.full_name,
+            "phone": user.phone,
+            "is_active": user.is_active,
+        },
+    )
     return user

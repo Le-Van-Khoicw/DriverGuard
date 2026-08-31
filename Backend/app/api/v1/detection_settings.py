@@ -9,6 +9,7 @@ from app.models.device import Device
 from app.schemas.detection_setting import (
     DetectionSettingCreate, DetectionSettingUpdate, DetectionSettingOut
 )
+from app.services.audit import log_action
 
 router = APIRouter(prefix="/detection-settings", tags=["detection-settings"])
 
@@ -62,7 +63,6 @@ def create_or_update_settings(
     db: Session = Depends(get_db),
     current_admin=Depends(get_current_admin),
 ):
-
     if payload.deviceId:
         device = db.query(Device).filter(Device.id == payload.deviceId).first()
         if not device:
@@ -74,11 +74,28 @@ def create_or_update_settings(
     existing = query.first()
 
     if existing:
+        before = {
+            "earThreshold": float(existing.ear_threshold),
+            "confidenceThreshold": float(existing.confidence_threshold),
+            "closedDurationThresholdMs": existing.closed_duration_threshold_ms,
+        }
+
         existing.ear_threshold = payload.earThreshold
         existing.confidence_threshold = payload.confidenceThreshold
         existing.closed_duration_threshold_ms = payload.closedDurationThresholdMs
         db.commit()
         db.refresh(existing)
+
+        log_action(
+            db, admin_id=current_admin.id, action="update_detection_settings",
+            target_table="detection_settings", target_id=existing.id,
+            before_value=before,
+            after_value={
+                "earThreshold": float(existing.ear_threshold),
+                "confidenceThreshold": float(existing.confidence_threshold),
+                "closedDurationThresholdMs": existing.closed_duration_threshold_ms,
+            },
+        )
         return _to_out(existing)
 
     setting = DetectionSetting(
@@ -90,6 +107,18 @@ def create_or_update_settings(
     db.add(setting)
     db.commit()
     db.refresh(setting)
+
+    log_action(
+        db, admin_id=current_admin.id, action="create_detection_settings",
+        target_table="detection_settings", target_id=setting.id,
+        before_value=None,
+        after_value={
+            "deviceId": setting.device_id,
+            "earThreshold": float(setting.ear_threshold),
+            "confidenceThreshold": float(setting.confidence_threshold),
+            "closedDurationThresholdMs": setting.closed_duration_threshold_ms,
+        },
+    )
     return _to_out(setting)
 
 
