@@ -1,13 +1,21 @@
-# DriverGuard Web Dashboard
+# DriverGuard Web Admin
 
-Web Dashboard dành cho nhân viên vận hành và quản trị viên.
+Giao diện quản trị React/Vite cho hệ thống DriverGuard. Frontend sử dụng JWT
+Admin và kết nối FastAPI qua biến `VITE_API_BASE_URL`.
 
-Dự kiến dùng React/Vite và gọi Backend API. Web không truy cập MySQL trực tiếp.
+## Chạy local
 
-## Màn hình MVP
+```powershell
+Copy-Item .env.example .env
+npm install
+npm run dev
+```
 
-- Đăng nhập.
-- Dashboard tổng quan.
-- Danh sách thiết bị.
-- Lịch sử phiên giám sát.
-- Lịch sử cảnh báo và ảnh minh chứng.
+Mặc định Frontend chạy tại `http://localhost:5173` và Backend tại
+`http://localhost:8000/api/v1`.
+
+## Production build
+
+```powershell
+npm run build
+```
