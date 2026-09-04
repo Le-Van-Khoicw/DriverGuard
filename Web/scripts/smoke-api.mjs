@@ -17,7 +17,7 @@ const login = await send('/auth/login', {
 const { access_token } = await login.json();
 assert.equal(typeof access_token, 'string');
 const headers = { Authorization: `Bearer ${access_token}`, Origin: 'http://localhost:5173' };
-for (const path of ['/dashboard/summary', '/dashboard/alert-trend', '/users?role=driver', '/devices', '/vehicles', '/monitoring-sessions', '/drowsiness-events?pageSize=100', '/reports/export']) {
+for (const path of ['/dashboard/summary', '/dashboard/alert-trend', '/dashboard/recent-alerts?limit=5', '/users?role=driver', '/devices', '/device-bindings', '/vehicles', '/monitoring-sessions', '/drowsiness-events?pageSize=100', '/detection-settings', '/device-health', '/audit-logs?page_size=100', '/search?q=CAM&limit=20', '/reports/export']) {
   const response = await send(path, { headers });
   assert.equal(response.headers.get('access-control-allow-origin'), 'http://localhost:5173', `${path}: CORS`);
   if (path === '/reports/export') assert.match(response.headers.get('content-type'), /text\/csv/);
@@ -29,4 +29,4 @@ for (const path of ['/dashboard/summary', '/dashboard/alert-trend', '/users?role
   }
   console.log(`PASS ${path}`);
 }
-console.log('Live API smoke passed: login + 8 reads + CORS. No business data changed.');
+console.log('Live API smoke passed: login + 14 reads + CORS. No business data changed.');

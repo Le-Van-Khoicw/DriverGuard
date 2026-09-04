@@ -120,4 +120,20 @@ describe('API request contract', () => {
     expect(text).toContain('e1,NEW');
     expect(fetchMock.mock.calls[0][0]).toBe(api.exportReportUrl());
   });
+  it.each([
+    ['recent alerts', () => api.recentAlerts(8), '/dashboard/recent-alerts?limit=8', 'GET', undefined],
+    ['bindings', () => api.bindings({ status: 'active' }), '/device-bindings?status=active', 'GET', undefined],
+    ['create binding', () => api.createBinding({ userId: 'u1', deviceId: 'd1' }), '/device-bindings', 'POST', { userId: 'u1', deviceId: 'd1' }],
+    ['unbind', () => api.unbindDevice('b1'), '/device-bindings/b1/unbind', 'PATCH', undefined],
+    ['settings', () => api.detectionSettings(), '/detection-settings', 'GET', undefined],
+    ['save settings', () => api.saveDetectionSettings({ deviceId: null, earThreshold: .25, confidenceThreshold: .8, closedDurationThresholdMs: 2000 }), '/detection-settings', 'POST', { deviceId: null, earThreshold: .25, confidenceThreshold: .8, closedDurationThresholdMs: 2000 }],
+    ['health filter', () => api.deviceHealth('d1'), '/device-health?device_id=d1', 'GET', undefined],
+    ['audit filters', () => api.auditLogs({ target_table: 'devices', page: 2 }), '/audit-logs?page=2&page_size=100&target_table=devices', 'GET', undefined],
+    ['global search', () => api.search('CAM 01', 10), '/search?q=CAM+01&limit=10', 'GET', undefined],
+  ] as const)('%s contract', async (_name, action, path, method, body) => {
+    sessionStorage.setItem('driverguard_token', 'jwt'); reply([]); await action();
+    const [url, init] = fetchMock.mock.calls[0]; expect(String(url)).toBe(`http://localhost:8000/api/v1${path}`);
+    expect(init?.method || 'GET').toBe(method);
+    if (body) expect(JSON.parse(String(init?.body))).toEqual(body);
+  });
 });

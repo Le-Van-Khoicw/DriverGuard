@@ -3,6 +3,10 @@ import { fixtures } from '../src/test/fixtures';
 
 async function mockBackend(page: Page) {
   const data = fixtures();
+  let bindings: Array<{ id: string; userId: string; deviceId: string; status: string; boundAt: string; unboundAt: string | null }> = [{ id: 'binding-1', userId: 'user-1', deviceId: 'device-1', status: 'active', boundAt: data.sessions[0].startedAt, unboundAt: null }];
+  let settings = [{ id: 'setting-1', deviceId: null, earThreshold: 0.25, confidenceThreshold: 0.8, closedDurationThresholdMs: 2000, updatedAt: data.sessions[0].startedAt }];
+  const health = [{ id: 'health-1', deviceId: 'device-1', status: 'connected', lastHeartbeatAt: data.sessions[0].startedAt, note: null, createdAt: data.sessions[0].startedAt }];
+  const audits = [{ id: 'audit-1', adminId: 'admin-1', action: 'update_device', targetTable: 'devices', targetId: 'device-1', beforeValue: { status: 'offline' }, afterValue: { status: 'online' }, createdAt: data.sessions[0].startedAt }];
   await page.route('**/api/v1/**', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -26,6 +30,17 @@ async function mockBackend(page: Page) {
       const vehicle = { ...data.vehicles[0], ...request.postDataJSON(), id: 'vehicle-2' };
       data.vehicles.push(vehicle); return route.fulfill({ json: vehicle });
     }
+    if (request.method() === 'POST' && path === '/device-bindings') {
+      bindings = bindings.map(item => ({ ...item, status: 'ended', unboundAt: data.sessions[0].startedAt }));
+      const binding = { id: 'binding-2', ...request.postDataJSON(), status: 'active', boundAt: data.sessions[0].startedAt, unboundAt: null };
+      bindings.push(binding); return route.fulfill({ json: binding });
+    }
+    if (request.method() === 'POST' && path === '/detection-settings') {
+      const payload = request.postDataJSON(); const existing = settings.find(item => item.deviceId === payload.deviceId);
+      const setting = { ...(existing || { id: 'setting-2' }), ...payload, updatedAt: data.sessions[0].startedAt };
+      settings = existing ? settings.map(item => item.id === existing.id ? setting : item) : [...settings, setting];
+      return route.fulfill({ json: setting });
+    }
     if (request.method() === 'PATCH' && path.startsWith('/devices/')) {
       const device = data.devices.find(d => path.endsWith(d.id));
       Object.assign(device!, request.postDataJSON()); return route.fulfill({ json: device });
@@ -37,16 +52,22 @@ async function mockBackend(page: Page) {
     if (request.method() === 'PATCH' && path.endsWith('/status')) {
       Object.assign(data.events[0], request.postDataJSON()); return route.fulfill({ json: data.events[0] });
     }
+    if (request.method() === 'PATCH' && path.endsWith('/unbind')) {
+      const binding = bindings.find(item => path.includes(item.id))!; Object.assign(binding, { status: 'ended', unboundAt: data.sessions[0].startedAt });
+      return route.fulfill({ json: binding });
+    }
     if (request.method() === 'DELETE' && path.startsWith('/vehicles/')) {
       data.vehicles = data.vehicles.filter(v => !path.endsWith(v.id));
       return route.fulfill({ status: 204 });
     }
     if (request.method() !== 'GET') throw new Error(`Unexpected mutation ${path}`);
     const responses: Record<string, unknown> = {
-      '/dashboard/summary': data.summary, '/dashboard/alert-trend': data.trend,
+      '/dashboard/summary': data.summary, '/dashboard/alert-trend': data.trend, '/dashboard/recent-alerts': data.events,
       '/users': data.users, '/devices': data.devices, '/vehicles': data.vehicles,
       '/monitoring-sessions': data.sessions,
       '/drowsiness-events': { items: data.events, total: 1, page: 1, pageSize: 100 },
+      '/device-bindings': bindings, '/detection-settings': settings, '/device-health': health, '/audit-logs': audits,
+      '/search': [{ type: 'device', id: 'device-1', title: 'CAM-001', subtitle: 'Camera An' }],
     };
     if (!(path in responses)) throw new Error(`Unexpected API request ${path}`);
     return route.fulfill({ json: responses[path] });
@@ -84,7 +105,7 @@ test('login validation, wrong password, successful login, reload and logout', as
 test('all pages render without runtime errors or page-level horizontal overflow', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await login(page);
-  for (const [nav, title] of [['Thiết bị', 'Thiết bị'], ['Tài xế', 'Tài xế'], ['Phương tiện', 'Phương tiện'], ['Phiên giám sát', 'Phiên giám sát'], ['Cảnh báo', 'Cảnh báo buồn ngủ'], ['Tổng quan', 'Tổng quan hệ thống']]) {
+  for (const [nav, title] of [['Thiết bị', 'Thiết bị'], ['Gán thiết bị', 'Gán thiết bị'], ['Tài xế', 'Tài xế'], ['Phương tiện', 'Phương tiện'], ['Phiên giám sát', 'Phiên giám sát'], ['Cảnh báo', 'Cảnh báo buồn ngủ'], ['Cấu hình AI', 'Cấu hình nhận diện'], ['Sức khỏe thiết bị', 'Tình trạng thiết bị'], ['Nhật ký', 'Nhật ký quản trị'], ['Tổng quan', 'Tổng quan hệ thống']]) {
     await navigate(page, nav);
     await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
@@ -158,4 +179,32 @@ test('network failure is visible and retry recovers', async ({ page }) => {
   await page.getByRole('button', { name: 'Thử lại' }).click();
   await expect(page.getByText('Không thể tải dữ liệu Backend')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Tổng quan hệ thống' })).toBeVisible();
+});
+test('device binding, AI settings, heartbeat, audit and global search', async ({ page }) => {
+  await login(page);
+  await navigate(page, 'Gán thiết bị');
+  await expect(page.getByRole('cell', { name: 'Camera An', exact: true })).toBeVisible();
+  await page.getByRole('main').getByRole('button', { name: 'Gán thiết bị', exact: true }).click();
+  const bindingRequest = page.waitForRequest(r => r.url().endsWith('/device-bindings') && r.method() === 'POST');
+  await page.getByRole('button', { name: 'Xác nhận gán' }).click();
+  expect((await bindingRequest).postDataJSON()).toEqual({ userId: 'user-1', deviceId: 'device-1' });
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: /Hủy gán/ }).last().click();
+  await expect(page.getByRole('button', { name: /Hủy gán/ })).toHaveCount(0);
+  await navigate(page, 'Cấu hình AI');
+  await page.getByLabel('Ngưỡng EAR').fill('0.3');
+  const settingsRequest = page.waitForRequest(r => r.url().endsWith('/detection-settings') && r.method() === 'POST');
+  await page.getByRole('button', { name: /Lưu cấu hình/ }).click();
+  expect((await settingsRequest).postDataJSON()).toMatchObject({ deviceId: null, earThreshold: .3 });
+  await expect(page.getByText('Đã lưu cấu hình nhận diện')).toBeVisible();
+  await navigate(page, 'Sức khỏe thiết bị'); await expect(page.getByText('connected')).toBeVisible();
+  await page.getByLabel('Lọc thiết bị').selectOption('device-1');
+  await expect(page.getByRole('cell', { name: 'Camera An', exact: true })).toBeVisible();
+  await navigate(page, 'Nhật ký'); await page.getByRole('button', { name: 'Chi tiết' }).click();
+  await expect(page.getByRole('dialog', { name: 'Chi tiết thay đổi' })).toContainText('offline');
+  await page.getByRole('button', { name: 'Đóng hộp thoại' }).click();
+  await page.getByLabel('Tìm kiếm toàn hệ thống').fill('CAM-001');
+  const searchRequest = page.waitForRequest(r => r.url().includes('/search?q=CAM-001'));
+  await page.getByLabel('Thực hiện tìm kiếm').click();
+  await searchRequest; await expect(page.getByRole('heading', { name: 'Kết quả tìm kiếm' })).toBeVisible(); await expect(page.getByText('CAM-001', { exact: true })).toBeVisible();
 });

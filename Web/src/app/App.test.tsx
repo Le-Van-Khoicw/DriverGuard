@@ -7,10 +7,12 @@ import { api } from '../api/client';
 import { fixtures } from '../test/fixtures';
 
 vi.mock('../api/client', () => ({ api: {
-  hasToken: vi.fn(), login: vi.fn(), logout: vi.fn(), dashboard: vi.fn(), alertTrend: vi.fn(),
+  hasToken: vi.fn(), login: vi.fn(), logout: vi.fn(), dashboard: vi.fn(), alertTrend: vi.fn(), recentAlerts: vi.fn(),
   users: vi.fn(), devices: vi.fn(), vehicles: vi.fn(), sessions: vi.fn(), events: vi.fn(),
   createUser: vi.fn(), updateUser: vi.fn(), createDevice: vi.fn(), updateDevice: vi.fn(),
   createVehicle: vi.fn(), deleteVehicle: vi.fn(), updateEventStatus: vi.fn(), exportReport: vi.fn(),
+  bindings: vi.fn(), createBinding: vi.fn(), unbindDevice: vi.fn(), detectionSettings: vi.fn(),
+  saveDetectionSettings: vi.fn(), deviceHealth: vi.fn(), auditLogs: vi.fn(), search: vi.fn(),
 } }));
 // jsdom has no layout engine. Real chart rendering is checked by Playwright.
 vi.mock('recharts', () => ({
@@ -25,6 +27,7 @@ beforeEach(() => {
   mock.hasToken.mockReturnValue(true);
   mock.dashboard.mockResolvedValue(data.summary);
   mock.alertTrend.mockResolvedValue(data.trend);
+  mock.recentAlerts.mockResolvedValue(data.events);
   mock.users.mockResolvedValue(data.users);
   mock.devices.mockResolvedValue(data.devices);
   mock.vehicles.mockResolvedValue(data.vehicles);
@@ -93,6 +96,7 @@ it('shows load failure and retries successfully', async () => {
 it('shows empty dashboard and empty resource pages', async () => {
   mock.users.mockResolvedValue([]); mock.devices.mockResolvedValue([]); mock.sessions.mockResolvedValue([]);
   mock.vehicles.mockResolvedValue([]); mock.events.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 });
+  mock.recentAlerts.mockResolvedValue([]);
   const user = await openPage(); expect(screen.getByText('Chưa có cảnh báo')).toBeVisible();
   for (const [name, text] of [['Thiết bị', 'Không tìm thấy thiết bị'], ['Tài xế', 'Không tìm thấy tài xế'], ['Phương tiện', 'Không tìm thấy phương tiện'], ['Phiên giám sát', 'Chưa có phiên giám sát'], ['Cảnh báo', 'Không tìm thấy cảnh báo']]) {
     await user.click(within(screen.getByRole('navigation')).getByRole('button', { name: new RegExp(`^${name}`) }));
