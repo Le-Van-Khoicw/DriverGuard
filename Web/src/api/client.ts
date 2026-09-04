@@ -88,28 +88,37 @@ function token() {
   return sessionStorage.getItem("driverguard_token");
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  const accessToken = token();
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
-  if (init.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
-
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+async function fetchResponse(url: string, init: RequestInit): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch {
+    throw new ApiError("Không thể kết nối tới máy chủ. Vui lòng thử lại.", 0);
+  }
   if (response.status === 401) {
     sessionStorage.removeItem("driverguard_token");
     window.dispatchEvent(new Event("driverguard:unauthorized"));
   }
   if (!response.ok) {
-    let message = "Không thể kết nối tới máy chủ";
-    try {
-      const body = await response.json();
-      message = body.detail || message;
-    } catch {
-      // Response is not JSON.
-    }
+    const body = await response.json().catch(() => ({}));
+    const detail = body.detail;
+    const message = typeof detail === "string" ? detail : Array.isArray(detail)
+      ? detail.map((item: { msg?: string }) => item.msg || "Dữ liệu không hợp lệ").join("; ")
+      : `Yêu cầu thất bại (HTTP ${response.status})`;
     throw new ApiError(message, response.status);
   }
+  return response;
+}
+
+async function request<T>(path: string, init: RequestInit = {}, format: "json" | "blob" = "json"): Promise<T> {
+  const headers = new Headers(init.headers);
+  const accessToken = token();
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  if (init.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
+
+  const response = await fetchResponse(`${API_BASE_URL}${path}`, { ...init, headers });
   if (response.status === 204) return undefined as T;
+  if (format === "blob") return response.blob() as Promise<T>;
   return response.json() as Promise<T>;
 }
 
@@ -125,16 +134,15 @@ function query(params: Record<string, string | number | undefined>) {
 export const api = {
   async login(username: string, password: string) {
     const form = new URLSearchParams({ username, password });
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    const response = await fetchResponse(`${API_BASE_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form,
     });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new ApiError(body.detail || "Tên đăng nhập hoặc mật khẩu không đúng", response.status);
-    }
     const data = await response.json();
+    if (typeof data.access_token !== "string" || !data.access_token.trim()) {
+      throw new ApiError("Máy chủ không trả về token đăng nhập hợp lệ", 502);
+    }
     sessionStorage.setItem("driverguard_token", data.access_token);
   },
   logout() {
@@ -173,4 +181,5 @@ export const api = {
       body: JSON.stringify({ status, note: note || null }),
     }),
   exportReportUrl: () => `${API_BASE_URL}/reports/export`,
+  exportReport: () => request<Blob>("/reports/export", {}, "blob"),
 };
