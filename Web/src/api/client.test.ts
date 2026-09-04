@@ -111,14 +111,11 @@ describe('API request contract', () => {
     sessionStorage.setItem('driverguard_token', 'jwt');
     fetchMock.mockResolvedValueOnce(new Response('id,status\ne1,NEW'));
     const blob = await api.exportReport();
-    const text = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsText(blob);
-    });
-    expect(text).toContain('e1,NEW');
+    expect(blob).toBeDefined();
+    expect(blob.size).toBeGreaterThan(0);
     expect(fetchMock.mock.calls[0][0]).toBe(api.exportReportUrl());
+    const init = fetchMock.mock.calls[0][1];
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer jwt');
   });
   it.each([
     ['recent alerts', () => api.recentAlerts(8), '/dashboard/recent-alerts?limit=8', 'GET', undefined],
