@@ -2,16 +2,17 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, BarChart3, Bell, Camera, Car, ChevronRight,
   CircleUserRound, Download, Eye, EyeOff, Gauge, LayoutDashboard, LoaderCircle,
-  LockKeyhole, LogOut, Menu, Moon, Plus, RefreshCw, Search, ShieldCheck,
+  HeartPulse, History, Link2, LockKeyhole, LogOut, Menu, Moon, Plus, RefreshCw, Search, Settings2, ShieldCheck,
   Sun, Users, Video, Wifi, WifiOff, X,
 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
-  api, AlertTrendPoint, DashboardSummary, Device, DrowsinessEvent,
+  api, AlertTrendPoint, DashboardSummary, Device, DrowsinessEvent, RecentAlert,
   MonitoringSession, User, Vehicle,
 } from "../api/client";
+import { AuditPage, BindingsPage, GlobalSearchPage, HealthPage, SettingsPage } from "./ManagementPages";
 
-type View = "dashboard" | "devices" | "users" | "vehicles" | "sessions" | "alerts";
+type View = "dashboard" | "devices" | "bindings" | "users" | "vehicles" | "sessions" | "alerts" | "settings" | "health" | "audit" | "search";
 type DataState = {
   summary: DashboardSummary | null;
   trend: AlertTrendPoint[];
@@ -20,19 +21,25 @@ type DataState = {
   vehicles: Vehicle[];
   sessions: MonitoringSession[];
   events: DrowsinessEvent[];
+  recentAlerts: RecentAlert[];
 };
 
 const EMPTY_DATA: DataState = {
-  summary: null, trend: [], users: [], devices: [], vehicles: [], sessions: [], events: [],
+  summary: null, trend: [], users: [], devices: [], vehicles: [], sessions: [], events: [], recentAlerts: [],
 };
 
 const NAV = [
   { id: "dashboard" as const, label: "Tổng quan", icon: LayoutDashboard },
   { id: "devices" as const, label: "Thiết bị", icon: Camera },
+  { id: "bindings" as const, label: "Gán thiết bị", icon: Link2 },
   { id: "users" as const, label: "Tài xế", icon: Users },
   { id: "vehicles" as const, label: "Phương tiện", icon: Car },
   { id: "sessions" as const, label: "Phiên giám sát", icon: Video },
   { id: "alerts" as const, label: "Cảnh báo", icon: AlertTriangle },
+  { id: "settings" as const, label: "Cấu hình AI", icon: Settings2 },
+  { id: "health" as const, label: "Sức khỏe thiết bị", icon: HeartPulse },
+  { id: "audit" as const, label: "Nhật ký", icon: History },
+  { id: "search" as const, label: "Tìm kiếm", icon: Search },
 ];
 
 function formatDate(value?: string | null) {
@@ -102,7 +109,7 @@ function Sidebar({ view, setView, open, close, logout, alerts }: { view: View; s
     {open && <button className="sidebar-backdrop" onClick={close} aria-label="Đóng menu" />}
     <aside className={`sidebar ${open ? "sidebar-open" : ""}`}>
       <div className="sidebar-brand"><span className="brand-mark"><ShieldCheck /></span><div><strong>DrowsyGuard</strong><small>Admin Portal</small></div><button className="mobile-close" onClick={close}><X /></button></div>
-      <nav>{NAV.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? "active" : ""} onClick={() => { setView(id); close(); }}><Icon />{label}{id === "alerts" && alerts > 0 && <em>{alerts}</em>}</button>)}</nav>
+      <nav>{NAV.filter(item => item.id !== "search").map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? "active" : ""} onClick={() => { setView(id); close(); }}><Icon />{label}{id === "alerts" && alerts > 0 && <em>{alerts}</em>}</button>)}</nav>
       <button className="logout-button" onClick={logout}><LogOut />Đăng xuất</button>
     </aside>
   </>;
@@ -112,9 +119,9 @@ function Stat({ label, value, note, icon: Icon, tone }: { label: string; value: 
   return <article className="stat-card"><span className={`stat-icon ${tone}`}><Icon /></span><div><small>{label}</small><strong>{value}</strong><p>{note}</p></div></article>;
 }
 
-function Dashboard({ data, openAlert }: { data: DataState; openAlert: (event: DrowsinessEvent) => void }) {
+function Dashboard({ data, openAlert }: { data: DataState; openAlert: (event: RecentAlert) => void }) {
   const summary = data.summary;
-  const recent = data.events.slice(0, 5);
+  const recent = data.recentAlerts;
   return <div className="page-stack">
     <div className="page-heading"><div><p>TRUNG TÂM ĐIỀU HÀNH</p><h1>Tổng quan hệ thống</h1><span>Dữ liệu đồng bộ trực tiếp từ DriverGuard Backend.</span></div><Badge tone="green"><span className="live-dot" /> Đang kết nối</Badge></div>
     <section className="stats-grid">
@@ -212,11 +219,12 @@ function EventDetail({ event, close, saved }: { event: DrowsinessEvent; close: (
 function Modal({ title, close, children, wide = false }: { title: string; close: () => void; children: React.ReactNode; wide?: boolean }) { return <div className="modal-backdrop" onMouseDown={close}><section role="dialog" aria-modal="true" aria-label={title} className={`modal ${wide ? "modal-wide" : ""}`} onMouseDown={(e) => e.stopPropagation()}><header><h2>{title}</h2><button aria-label="Đóng hộp thoại" onClick={close}><X /></button></header>{children}</section></div>; }
 
 function AppShell({ logout }: { logout: () => void }) {
-  const [view, setView] = useState<View>("dashboard"); const [data, setData] = useState<DataState>(EMPTY_DATA); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [menu, setMenu] = useState(false); const [dark, setDark] = useState(true); const [event, setEvent] = useState<DrowsinessEvent | null>(null);
-  const load = useCallback(async () => { setLoading(true); setError(""); try { const [summary, trend, users, devices, vehicles, sessions, events] = await Promise.all([api.dashboard(), api.alertTrend(), api.users(), api.devices(), api.vehicles(), api.sessions(), api.events()]); setData({ summary, trend, users, devices, vehicles, sessions, events: events.items }); } catch (reason) { setError(reason instanceof Error ? reason.message : "Không thể tải dữ liệu"); } finally { setLoading(false); } }, []);
+  const [view, setView] = useState<View>("dashboard"); const [data, setData] = useState<DataState>(EMPTY_DATA); const [loading, setLoading] = useState(true); const [error, setError] = useState(""); const [menu, setMenu] = useState(false); const [dark, setDark] = useState(true); const [event, setEvent] = useState<DrowsinessEvent | null>(null); const [searchDraft, setSearchDraft] = useState(""); const [globalSearch, setGlobalSearch] = useState("");
+  const load = useCallback(async () => { setLoading(true); setError(""); try { const [summary, trend, recentAlerts, users, devices, vehicles, sessions, events] = await Promise.all([api.dashboard(), api.alertTrend(), api.recentAlerts(), api.users(), api.devices(), api.vehicles(), api.sessions(), api.events()]); setData({ summary, trend, recentAlerts, users, devices, vehicles, sessions, events: events.items }); } catch (reason) { setError(reason instanceof Error ? reason.message : "Không thể tải dữ liệu"); } finally { setLoading(false); } }, []);
   useEffect(() => { void load(); }, [load]); useEffect(() => { document.documentElement.dataset.theme = dark ? "dark" : "light"; }, [dark]);
-  const content = useMemo(() => { if (view === "dashboard") return <Dashboard data={data} openAlert={setEvent} />; if (view === "devices") return <DevicesPage items={data.devices} reload={load} />; if (view === "users") return <UsersPage items={data.users} reload={load} />; if (view === "vehicles") return <VehiclesPage items={data.vehicles} users={data.users} reload={load} />; if (view === "sessions") return <SessionsPage items={data.sessions} users={data.users} devices={data.devices} vehicles={data.vehicles} />; return <AlertsPage data={data} open={setEvent} reload={load} />; }, [view, data, load]);
-  return <div className="app-shell"><Sidebar view={view} setView={setView} open={menu} close={() => setMenu(false)} logout={logout} alerts={data.summary?.unhandledAlerts || 0} /><div className="main-column"><header className="topbar"><button aria-label="Mở menu" className="menu-button" onClick={() => setMenu(true)}><Menu /></button><div><span>DrowsyGuard</span><ChevronRight /><strong>{NAV.find((n) => n.id === view)?.label}</strong></div><div className="topbar-actions"><button aria-label="Đổi giao diện sáng tối" onClick={() => setDark((v) => !v)}>{dark ? <Sun /> : <Moon />}</button><button><Bell /><span className="notification-dot" /></button><span className="admin-avatar"><CircleUserRound /></span></div></header><main className="content">{error && <div className="connection-error"><WifiOff /><div><strong>Không thể tải dữ liệu Backend</strong><p>{error}</p></div><button onClick={load}>Thử lại</button></div>}{loading ? <div className="loading-screen"><LoaderCircle className="spin" /><span>Đang đồng bộ dữ liệu...</span></div> : content}</main></div>{event && <EventDetail event={event} close={() => setEvent(null)} saved={load} />}</div>;
+  const content = useMemo(() => { if (view === "dashboard") return <Dashboard data={data} openAlert={(recent) => setEvent(data.events.find(item => item.id === recent.id) || null)} />; if (view === "devices") return <DevicesPage items={data.devices} reload={load} />; if (view === "bindings") return <BindingsPage users={data.users} devices={data.devices} />; if (view === "users") return <UsersPage items={data.users} reload={load} />; if (view === "vehicles") return <VehiclesPage items={data.vehicles} users={data.users} reload={load} />; if (view === "sessions") return <SessionsPage items={data.sessions} users={data.users} devices={data.devices} vehicles={data.vehicles} />; if (view === "settings") return <SettingsPage devices={data.devices} />; if (view === "health") return <HealthPage devices={data.devices} />; if (view === "audit") return <AuditPage />; if (view === "search") return <GlobalSearchPage term={globalSearch} />; return <AlertsPage data={data} open={setEvent} reload={load} />; }, [view, data, load, globalSearch]);
+  function submitGlobalSearch(e: FormEvent) { e.preventDefault(); const value = searchDraft.trim(); if (!value) return; setGlobalSearch(value); setView("search"); }
+  return <div className="app-shell"><Sidebar view={view} setView={setView} open={menu} close={() => setMenu(false)} logout={logout} alerts={data.summary?.unhandledAlerts || 0} /><div className="main-column"><header className="topbar"><button aria-label="Mở menu" className="menu-button" onClick={() => setMenu(true)}><Menu /></button><div className="topbar-breadcrumb"><span>DrowsyGuard</span><ChevronRight /><strong>{NAV.find((n) => n.id === view)?.label}</strong></div><form className="topbar-search" onSubmit={submitGlobalSearch}><Search /><input aria-label="Tìm kiếm toàn hệ thống" value={searchDraft} onChange={e => setSearchDraft(e.target.value)} placeholder="Tìm tài xế, thiết bị, phương tiện..." /><button aria-label="Thực hiện tìm kiếm">Tìm</button></form><div className="topbar-actions"><button aria-label="Đổi giao diện sáng tối" onClick={() => setDark((v) => !v)}>{dark ? <Sun /> : <Moon />}</button><button><Bell /><span className="notification-dot" /></button><span className="admin-avatar"><CircleUserRound /></span></div></header><main className="content">{error && <div className="connection-error"><WifiOff /><div><strong>Không thể tải dữ liệu Backend</strong><p>{error}</p></div><button onClick={load}>Thử lại</button></div>}{loading ? <div className="loading-screen"><LoaderCircle className="spin" /><span>Đang đồng bộ dữ liệu...</span></div> : content}</main></div>{event && <EventDetail event={event} close={() => setEvent(null)} saved={load} />}</div>;
 }
 
 export default function App() {

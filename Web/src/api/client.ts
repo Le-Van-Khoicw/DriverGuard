@@ -69,6 +69,13 @@ export type DashboardSummary = {
 
 export type AlertTrendPoint = { date: string; count: number };
 
+export type RecentAlert = Pick<DrowsinessEvent, "id" | "sessionId" | "eventType" | "occurredAt" | "status">;
+export type DeviceBinding = { id: string; userId: string; deviceId: string; status: "active" | "ended"; boundAt: string; unboundAt: string | null };
+export type DetectionSetting = { id: string; deviceId: string | null; earThreshold: number; confidenceThreshold: number; closedDurationThresholdMs: number; updatedAt: string };
+export type DeviceHealth = { id: string; deviceId: string; status: string; lastHeartbeatAt: string | null; note: string | null; createdAt: string };
+export type AuditLog = { id: string; adminId: string; action: string; targetTable: string; targetId: string | null; beforeValue: Record<string, unknown> | null; afterValue: Record<string, unknown> | null; createdAt: string };
+export type SearchResult = { type: "user" | "device" | "vehicle"; id: string; title: string; subtitle: string | null };
+
 export type EventPage = {
   items: DrowsinessEvent[];
   total: number;
@@ -152,6 +159,7 @@ export const api = {
 
   dashboard: () => request<DashboardSummary>("/dashboard/summary"),
   alertTrend: (days = 7) => request<AlertTrendPoint[]>(`/dashboard/alert-trend?days=${days}`),
+  recentAlerts: (limit = 5) => request<RecentAlert[]>(`/dashboard/recent-alerts?limit=${limit}`),
   users: () => request<User[]>("/users?role=driver"),
   createUser: (data: { full_name: string; phone?: string }) =>
     request<User>("/users", { method: "POST", body: JSON.stringify({ ...data, role: "driver", is_active: true }) }),
@@ -163,6 +171,12 @@ export const api = {
     request<Device>("/devices", { method: "POST", body: JSON.stringify(data) }),
   updateDevice: (id: string, data: { deviceName?: string; status?: string }) =>
     request<Device>(`/devices/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  bindings: (params: Record<string, string> = {}) =>
+    request<DeviceBinding[]>(`/device-bindings${query(params)}`),
+  createBinding: (data: { userId: string; deviceId: string }) =>
+    request<DeviceBinding>("/device-bindings", { method: "POST", body: JSON.stringify(data) }),
+  unbindDevice: (id: string) => request<DeviceBinding>(`/device-bindings/${id}/unbind`, { method: "PATCH" }),
 
   vehicles: () => request<Vehicle[]>("/vehicles"),
   createVehicle: (data: Omit<Vehicle, "id" | "createdAt" | "updatedAt">) =>
@@ -180,6 +194,14 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status, note: note || null }),
     }),
+  detectionSettings: () => request<DetectionSetting[]>("/detection-settings"),
+  saveDetectionSettings: (data: Omit<DetectionSetting, "id" | "updatedAt">) =>
+    request<DetectionSetting>("/detection-settings", { method: "POST", body: JSON.stringify(data) }),
+  deviceHealth: (deviceId?: string) =>
+    request<DeviceHealth[]>(`/device-health${query({ device_id: deviceId })}`),
+  auditLogs: (params: Record<string, string | number | undefined> = {}) =>
+    request<AuditLog[]>(`/audit-logs${query({ page: 1, page_size: 100, ...params })}`),
+  search: (term: string, limit = 20) => request<SearchResult[]>(`/search${query({ q: term, limit })}`),
   exportReportUrl: () => `${API_BASE_URL}/reports/export`,
   exportReport: () => request<Blob>("/reports/export", {}, "blob"),
 };
