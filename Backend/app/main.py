@@ -1,7 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import auth, users, devices, device_bindings, vehicles, monitoring_sessions, drowsiness_events, detection_settings, device_health, dashboard, global_search, reports, audit_logs
-
+from app.api.v1 import (
+    auth, users, devices, device_bindings, vehicles,
+    monitoring_sessions, drowsiness_events,
+    detection_settings, device_health,
+    dashboard, global_search, reports, audit_logs,
+    locations,
+)
 app = FastAPI(title="Driver Drowsiness Admin API")
 
 app.add_middleware(
@@ -28,3 +33,4 @@ app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(global_search.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(audit_logs.router, prefix="/api/v1")
+app.include_router(locations.router, prefix="/api/v1")
