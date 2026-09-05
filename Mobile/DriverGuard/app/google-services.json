@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "925387921691",
+    "project_id": "driverguard-854e5",
+    "storage_bucket": "driverguard-854e5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:925387921691:android:84eafd24c3628cc9039bbe",
+        "android_client_info": {
+          "package_name": "com.example.driverguard"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "925387921691-spqfl7k7i6j79m1n53d46qk9pnl9o4e8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.driverguard",
+            "certificate_hash": "541a5deed24c80757b9b670daa99cf013cefe252"
+          }
+        },
+        {
+          "client_id": "925387921691-nmjg8s8i25ie3hj0c63grhrv7bqh1kk5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7mjSzK0waZCllvmmCuyQugqjlnMHbL2Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "925387921691-nmjg8s8i25ie3hj0c63grhrv7bqh1kk5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
