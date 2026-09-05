@@ -18,6 +18,8 @@ def _to_out(e: DrowsinessEvent) -> DrowsinessEventOut:
         closedDurationMs=e.closed_duration_ms, imageUrl=e.image_url,
         occurredAt=e.occurred_at, status=e.status,
         handledBy=e.handled_by, note=e.note,
+        latitude=float(e.latitude) if e.latitude is not None else None,
+        longitude=float(e.longitude) if e.longitude is not None else None,
     )
 
 @router.post("", response_model=DrowsinessEventOut)
@@ -38,6 +40,8 @@ def create_event(payload: DrowsinessEventCreate, db: Session = Depends(get_db)):
         source=payload.source,
         occurred_at=payload.occurredAt,
         status="NEW",
+        latitude=payload.latitude,
+        longitude=payload.longitude,
     )
     db.add(event)
     db.commit()

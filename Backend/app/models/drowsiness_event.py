@@ -18,4 +18,6 @@ class DrowsinessEvent(Base):
     status = Column(String(30), nullable=False, default="NEW")  # NEW | ACKNOWLEDGED | RESOLVED
     handled_by = Column(CHAR(36), nullable=True)
     note = Column(Text, nullable=True)
+    latitude = Column(Numeric(10, 7), nullable=True)
+    longitude = Column(Numeric(10, 7), nullable=True)
     created_at = Column(DateTime, server_default=func.now())

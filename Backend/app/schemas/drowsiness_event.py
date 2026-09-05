@@ -11,6 +11,8 @@ class DrowsinessEventCreate(BaseModel):
     imageUrl: Optional[str] = None
     source: str
     occurredAt: datetime
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 class DrowsinessEventStatusUpdate(BaseModel):
     status: str  # NEW | ACKNOWLEDGED | RESOLVED
@@ -28,6 +30,8 @@ class DrowsinessEventOut(BaseModel):
     status: str
     handledBy: Optional[str]
     note: Optional[str]
+    latitude: Optional[float]
+    longitude: Optional[float]
 
     class Config:
         from_attributes = True
