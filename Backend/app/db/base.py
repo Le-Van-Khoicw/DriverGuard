@@ -9,3 +9,4 @@ from app.models.drowsiness_event import DrowsinessEvent
 from app.models.detection_setting import DetectionSetting
 from app.models.device_health import DeviceHealth
 from app.models.audit_log import AuditLog
+from app.models.location_log import LocationLog
