@@ -69,6 +69,8 @@ Table drowsiness_events {
   status varchar(30) [not null, default: 'NEW'] // NEW | ACKNOWLEDGED | RESOLVED
   handled_by char(36) // ref: users.id, null nếu chưa xử lý
   note text
+  latitude decimal(10,7)
+  longitude decimal(10,7)
   created_at datetime [not null]
 }
  
@@ -100,6 +102,16 @@ Table audit_logs {
   after_value json
   created_at datetime [not null]
 }
+
+Table location_logs {
+  id char(36) [pk]
+  session_id char(36) [not null]
+  device_id char(36) [not null]
+  latitude decimal(10,7) [not null]
+  longitude decimal(10,7) [not null]
+  speed_kmh decimal(6,2)
+  recorded_at datetime [not null]
+}
  
 Ref: device_bindings.user_id > users.id
 Ref: device_bindings.device_id > devices.id
@@ -109,3 +121,5 @@ Ref: monitoring_sessions.vehicle_id > vehicles.id
 Ref: vehicles.user_id > users.id
 Ref: drowsiness_events.session_id > monitoring_sessions.id
 Ref: drowsiness_events.handled_by > users.id
+Ref: location_logs.session_id > monitoring_sessions.id
+Ref: location_logs.device_id > devices.id
