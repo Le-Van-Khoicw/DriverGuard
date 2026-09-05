@@ -12,8 +12,12 @@ local.properties
 
 # Python
 __pycache__/
+venv/
 .venv/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+instance/
 
 # Web
 node_modules/
@@ -22,3 +26,11 @@ dist/
 # Local uploads and databases
 uploads/
 *.db
+
+# Logs
+*.log
+
+# Editor / OS
+.vscode/
+.DS_Store
+Thumbs.db
