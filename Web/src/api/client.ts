@@ -45,6 +45,8 @@ export type MonitoringSession = {
 };
 
 export type DrowsinessEvent = {
+  latitude?: number | null;
+  longitude?: number | null;
   id: string;
   sessionId: string;
   eventType: string;
@@ -66,6 +68,9 @@ export type DashboardSummary = {
   alertsToday: number;
   unhandledAlerts: number;
 };
+
+export type LatestLocation = { sessionId: string; deviceId: string; latitude: number; longitude: number; speedKmh: number | null; recordedAt: string };
+export type LocationLog = LatestLocation & { id: string };
 
 export type AlertTrendPoint = { date: string; count: number };
 
@@ -157,6 +162,8 @@ export const api = {
   },
   hasToken: () => Boolean(token()),
 
+  latestLocations: () => request<LatestLocation[]>("/locations/latest"),
+  locations: (sessionId: string) => request<LocationLog[]>(`/locations${query({ session_id: sessionId })}`),
   dashboard: () => request<DashboardSummary>("/dashboard/summary"),
   alertTrend: (days = 7) => request<AlertTrendPoint[]>(`/dashboard/alert-trend?days=${days}`),
   recentAlerts: (limit = 5) => request<RecentAlert[]>(`/dashboard/recent-alerts?limit=${limit}`),

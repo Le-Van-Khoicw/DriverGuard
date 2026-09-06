@@ -1,3 +1,4 @@
+vi.mock("./mapBackground", () => ({ addMapBackground: () => ({ remove: vi.fn() }) }));
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, expect, it, vi } from 'vitest';
@@ -7,7 +8,7 @@ import { api } from '../api/client';
 import { fixtures } from '../test/fixtures';
 
 vi.mock('../api/client', () => ({ api: {
-  hasToken: vi.fn(), login: vi.fn(), logout: vi.fn(), dashboard: vi.fn(), alertTrend: vi.fn(), recentAlerts: vi.fn(),
+  latestLocations: vi.fn(), locations: vi.fn(), hasToken: vi.fn(), login: vi.fn(), logout: vi.fn(), dashboard: vi.fn(), alertTrend: vi.fn(), recentAlerts: vi.fn(),
   users: vi.fn(), devices: vi.fn(), vehicles: vi.fn(), sessions: vi.fn(), events: vi.fn(),
   createUser: vi.fn(), updateUser: vi.fn(), createDevice: vi.fn(), updateDevice: vi.fn(),
   createVehicle: vi.fn(), deleteVehicle: vi.fn(), updateEventStatus: vi.fn(), exportReport: vi.fn(),
@@ -24,7 +25,7 @@ const mock = vi.mocked(api);
 beforeEach(() => {
   vi.resetAllMocks();
   const data = fixtures();
-  mock.hasToken.mockReturnValue(true);
+  mock.latestLocations.mockResolvedValue([]); mock.locations.mockResolvedValue([]); mock.hasToken.mockReturnValue(true);
   mock.dashboard.mockResolvedValue(data.summary);
   mock.alertTrend.mockResolvedValue(data.trend);
   mock.recentAlerts.mockResolvedValue(data.events);
@@ -81,7 +82,7 @@ it('returns to login on expired session notification', async () => {
 it('renders summary, chart and recent alert details', async () => {
   const user = await openPage();
   expect(screen.getByText('Tổng thiết bị')).toBeVisible(); expect(screen.getByTestId('chart')).toBeVisible();
-  await user.click(screen.getByRole('button', { name: /DROWSINESS/ }));
+  await user.click(screen.getByRole('button', { name: /Buồn ngủ/ }));
   expect(screen.getByRole('dialog', { name: 'Chi tiết cảnh báo' })).toBeVisible();
   expect(screen.getByText('Không có ảnh minh chứng')).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Đóng hộp thoại' }));
@@ -179,16 +180,16 @@ it('shows session linked names and supports search', async () => {
   await user.type(screen.getByPlaceholderText('Tìm kiếm...'), 'nobody'); expect(screen.getByText('Chưa có phiên giám sát')).toBeVisible();
 });
 it('filters alerts and saves handling status with note', async () => {
-  const user = await openPage('Cảnh báo'); await user.selectOptions(screen.getByRole('combobox'), 'RESOLVED');
-  expect(screen.getByText('Không tìm thấy cảnh báo')).toBeVisible(); await user.selectOptions(screen.getByRole('combobox'), 'NEW');
-  await user.click(screen.getByText('DROWSINESS')); await user.selectOptions(screen.getByLabelText('Trạng thái'), 'ACKNOWLEDGED');
+  const user = await openPage('Cảnh báo'); await user.selectOptions(screen.getByRole('combobox', { name: 'Lọc trạng thái' }), 'RESOLVED');
+  expect(screen.getByText('Không tìm thấy cảnh báo')).toBeVisible(); await user.selectOptions(screen.getByRole('combobox', { name: 'Lọc trạng thái' }), 'NEW');
+  await user.click(screen.getByRole('cell', { name: 'Buồn ngủ' })); await user.selectOptions(screen.getByLabelText('Trạng thái'), 'ACKNOWLEDGED');
   await user.type(screen.getByLabelText('Ghi chú'), 'Đã liên hệ'); await user.click(screen.getByRole('button', { name: 'Lưu xử lý' }));
   expect(mock.updateEventStatus).toHaveBeenCalledWith('event-1', 'ACKNOWLEDGED', 'Đã liên hệ');
 });
 it('shows evidence image and handling failure', async () => {
   mock.events.mockResolvedValue({ items: [{ ...fixtures().events[0], imageUrl: '/evidence.jpg' }], total: 1, page: 1, pageSize: 100 });
   mock.updateEventStatus.mockRejectedValue(new Error('Cannot resolve')); const user = await openPage('Cảnh báo');
-  await user.click(screen.getByText('DROWSINESS')); expect(screen.getByAltText('Ảnh minh chứng cảnh báo')).toHaveAttribute('src', '/evidence.jpg');
+  await user.click(screen.getByRole('cell', { name: 'Buồn ngủ' })); expect(screen.getByAltText('Ảnh minh chứng cảnh báo')).toHaveAttribute('src', '/evidence.jpg');
   await user.click(screen.getByRole('button', { name: 'Lưu xử lý' })); expect(await screen.findByText('Cannot resolve')).toBeVisible();
 });
 it('downloads CSV and revokes the object URL', async () => {
