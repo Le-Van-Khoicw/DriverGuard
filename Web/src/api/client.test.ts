@@ -134,3 +134,12 @@ describe('API request contract', () => {
     if (body) expect(JSON.parse(String(init?.body))).toEqual(body);
   });
 });
+
+it('reads GPS history using session_id and authenticates both location endpoints', async () => {
+  sessionStorage.setItem('driverguard_token', 'jwt');
+  reply([]); await api.locations('session & 1');
+  reply([]); await api.latestLocations();
+  expect(String(fetchMock.mock.calls[0][0])).toContain('/locations?session_id=session+%26+1');
+  expect(String(fetchMock.mock.calls[1][0])).toMatch(/\/locations\/latest$/);
+  for (const [, options] of fetchMock.mock.calls) expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer jwt');
+});

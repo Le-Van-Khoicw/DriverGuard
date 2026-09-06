@@ -1,3 +1,4 @@
+import process from "node:process";
 import { test, expect, type Page } from '@playwright/test';
 import { fixtures } from '../src/test/fixtures';
 
@@ -62,7 +63,7 @@ async function mockBackend(page: Page) {
     }
     if (request.method() !== 'GET') throw new Error(`Unexpected mutation ${path}`);
     const responses: Record<string, unknown> = {
-      '/dashboard/summary': data.summary, '/dashboard/alert-trend': data.trend, '/dashboard/recent-alerts': data.events,
+      '/locations/latest': [], '/locations': [], '/dashboard/summary': data.summary, '/dashboard/alert-trend': data.trend, '/dashboard/recent-alerts': data.events,
       '/users': data.users, '/devices': data.devices, '/vehicles': data.vehicles,
       '/monitoring-sessions': data.sessions,
       '/drowsiness-events': { items: data.events, total: 1, page: 1, pageSize: 100 },
@@ -105,7 +106,7 @@ test('login validation, wrong password, successful login, reload and logout', as
 test('all pages render without runtime errors or page-level horizontal overflow', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await login(page);
-  for (const [nav, title] of [['Thiết bị', 'Thiết bị'], ['Gán thiết bị', 'Gán thiết bị'], ['Tài xế', 'Tài xế'], ['Phương tiện', 'Phương tiện'], ['Phiên giám sát', 'Phiên giám sát'], ['Cảnh báo', 'Cảnh báo buồn ngủ'], ['Cấu hình AI', 'Cấu hình nhận diện'], ['Sức khỏe thiết bị', 'Tình trạng thiết bị'], ['Nhật ký', 'Nhật ký quản trị'], ['Tổng quan', 'Tổng quan hệ thống']]) {
+  for (const [nav, title] of [['Thiết bị', 'Thiết bị'], ['Gán thiết bị', 'Gán thiết bị'], ['Tài xế', 'Tài xế'], ['Phương tiện', 'Phương tiện'], ['Phiên giám sát', 'Phiên giám sát'], ['Cảnh báo', 'Cảnh báo an toàn'], ['Cấu hình AI', 'Cấu hình nhận diện'], ['Sức khỏe thiết bị', 'Tình trạng thiết bị'], ['Nhật ký', 'Nhật ký quản trị'], ['Tổng quan', 'Tổng quan hệ thống']]) {
     await navigate(page, nav);
     await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
@@ -130,7 +131,7 @@ test('create device and driver send correct API payloads', async ({ page }) => {
 });
 test('alert handling and CSV download', async ({ page }) => {
   await login(page); await navigate(page, 'Cảnh báo');
-  await page.getByText('DROWSINESS', { exact: true }).click();
+  await page.getByRole('cell', { name: 'Buồn ngủ', exact: true }).click();
   await page.getByRole('combobox', { name: 'Trạng thái', exact: true }).selectOption('ACKNOWLEDGED');
   await page.getByLabel('Ghi chú').fill('Đã gọi tài xế');
   const update = page.waitForRequest(r => r.url().endsWith('/event-1/status'));
@@ -207,4 +208,46 @@ test('device binding, AI settings, heartbeat, audit and global search', async ({
   const searchRequest = page.waitForRequest(r => r.url().includes('/search?q=CAM-001'));
   await page.getByLabel('Thực hiện tìm kiếm').click();
   await searchRequest; await expect(page.getByRole('heading', { name: 'Kết quả tìm kiếm' })).toBeVisible(); await expect(page.getByText('CAM-001', { exact: true })).toBeVisible();
+});
+
+test('GPS overview opens a chronological route and accident uses the existing handling flow', async ({ page }) => {
+  await mockBackend(page);
+  const gps = { id: 'gps-1', sessionId: 'session-1', deviceId: 'device-1', latitude: 10.776, longitude: 106.7, speedKmh: 32, recordedAt: new Date().toISOString() };
+  await page.route('**/api/v1/locations**', route => route.fulfill({ json: route.request().url().includes('/latest') ? [gps] : [gps, { ...gps, id: 'gps-2', latitude: 10.78, longitude: 106.71, speedKmh: 36, recordedAt: new Date(Date.now() + 1000).toISOString() }] }));
+  const accident = { ...fixtures().events[0], eventType: 'ACCIDENT', latitude: 10.778, longitude: 106.705 };
+  await page.route('**/api/v1/drowsiness-events?**', route => route.fulfill({ json: { items: [accident], total: 1, page: 1, pageSize: 100 } }));
+  await login(page);
+  await expect(page.getByText('32 km/h')).toBeVisible();
+  await expect(page.locator('.leaflet-interactive')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Xem lịch trình', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('36 km/h')).toBeVisible();
+  await expect(dialog.locator('.leaflet-overlay-pane path')).toHaveCount(3);
+  await page.screenshot({ path: `test-results/gps-route-${test.info().project.name}.png`, fullPage: true });
+  await dialog.getByRole('button', { name: 'Đóng hộp thoại' }).click();
+  await navigate(page, 'Cảnh báo');
+  await page.getByLabel('Loại cảnh báo').selectOption('ACCIDENT');
+  await page.getByRole('cell', { name: 'Tai nạn', exact: true }).click();
+  await expect(dialog.getByRole('link', { name: '10.778000, 106.705000' })).toBeVisible();
+  await expect(dialog.locator('.leaflet-overlay-pane path')).toHaveCount(4);
+  await dialog.getByLabel('Trạng thái', { exact: true }).selectOption('RESOLVED');
+  const update = page.waitForRequest(r => r.method() === 'PATCH' && r.url().includes('/status'));
+  await dialog.getByRole('button', { name: 'Lưu xử lý' }).click();
+  expect((await update).postDataJSON().status).toBe('RESOLVED');
+});
+
+test('live map background renders from OpenFreeMap', async ({ page }) => {
+  test.skip(process.env.LIVE_MAP_TEST !== '1', 'Opt-in check requiring internet and WebGL');
+  await mockBackend(page);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  const tiles = page.waitForResponse(r => r.url().includes('tiles.openfreemap.org') && /\.(pbf|mvt)(\?|$)/.test(r.url()) && r.ok());
+  await login(page);
+  await expect(page.locator('.maplibregl-canvas')).toBeVisible();
+  await tiles;
+  // Give the worker/GPU time to paint the downloaded vector data for visual QA.
+  await expect(page.locator(".location-map")).toHaveAttribute("aria-busy", "false", { timeout: 20000 });
+  await expect(page.getByRole('button', { name: 'Thử tải lại bản đồ' })).toHaveCount(0);
+  expect(errors).toEqual([]);
+  await page.locator('.location-map').screenshot({ path: `test-results/live-map-${test.info().project.name}.png` });
 });
