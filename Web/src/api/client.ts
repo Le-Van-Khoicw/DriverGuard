@@ -124,7 +124,7 @@ function token() {
 
 export const api = {
   async login(username: string, password: string) {
-    if ((username === "admin" || username === "admin@driverguard.vn") && password === "admin123") {
+    if ((username === "admin" || username === "admin@driverguard.vn" || username === "admin@gmail.com") && password === "admin123") {
       sessionStorage.setItem("driverguard_token", "admin_session_token");
       return;
     }
