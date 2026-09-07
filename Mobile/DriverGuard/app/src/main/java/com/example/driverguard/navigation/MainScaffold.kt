@@ -31,6 +31,8 @@ import com.example.driverguard.core.pip.PipManager
 import com.example.driverguard.core.theme.c
 import com.example.driverguard.core.theme.font
 
+import androidx.compose.foundation.layout.statusBarsPadding
+
 enum class MainTab(
     val label: String,
     val selectedIcon: ImageVector,
@@ -69,6 +71,8 @@ fun MainScaffold(
     val inPip by PipManager.isInPipMode.collectAsState()
 
     Scaffold(
+        modifier = if (!inPip) Modifier.statusBarsPadding() else Modifier,
+        containerColor = c.bg,
         bottomBar = {
             if (!inPip) {
                 NavigationBar(

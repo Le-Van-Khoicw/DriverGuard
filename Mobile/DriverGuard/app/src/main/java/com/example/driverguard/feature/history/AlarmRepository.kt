@@ -1,8 +1,12 @@
 package com.example.driverguard.feature.history
 
+import android.util.Log
+import com.example.driverguard.feature.monitoring.ai.TripRiskLevel
+import com.example.driverguard.feature.monitoring.ai.TripSummary
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -61,8 +65,8 @@ data class DayStat(
 )
 
 /**
- * Quản lý danh sách cảnh báo buồn ngủ tập trung.
- * Tự động đồng bộ 2 chiều với Cloud Firestore để không bao giờ bị mất dữ liệu lịch sử.
+ * Quản lý danh sách cảnh báo buồn ngủ và các chuyến đi đã phân tích AI.
+ * Tự động đồng bộ 2 chiều với Cloud Firestore.
  */
 object AlarmRepository {
     private val firestore by lazy { FirebaseFirestore.getInstance() }
@@ -71,8 +75,15 @@ object AlarmRepository {
     private val _events = MutableStateFlow<List<AlertEvent>>(emptyList())
     val events: StateFlow<List<AlertEvent>> = _events.asStateFlow()
 
+    private val _latestTripSummary = MutableStateFlow<TripSummary?>(null)
+    val latestTripSummary: StateFlow<TripSummary?> = _latestTripSummary.asStateFlow()
+
+    private val _savedTrips = MutableStateFlow<List<TripSummary>>(emptyList())
+    val savedTrips: StateFlow<List<TripSummary>> = _savedTrips.asStateFlow()
+
     init {
         startRealtimeSync()
+        syncSavedTrips()
     }
 
     /** Lắng nghe dữ liệu realtime từ Cloud Firestore */
@@ -116,6 +127,53 @@ object AlarmRepository {
         }
     }
 
+    /** Lắng nghe danh sách chuyến đi đã lưu từ Firestore */
+    fun syncSavedTrips() {
+        val uid = auth.currentUser?.uid
+        val query = if (!uid.isNullOrBlank()) {
+            firestore.collection("trips")
+                .whereEqualTo("userId", uid)
+                .orderBy("startTime", Query.Direction.DESCENDING)
+        } else {
+            firestore.collection("trips")
+                .orderBy("startTime", Query.Direction.DESCENDING)
+                .limit(20)
+        }
+
+        query.addSnapshotListener { snapshot, error ->
+            if (error != null || snapshot == null) return@addSnapshotListener
+            val list = snapshot.documents.mapNotNull { doc ->
+                try {
+                    val riskStr = doc.getString("riskLevel") ?: "SAFE"
+                    val riskLevel = try { TripRiskLevel.valueOf(riskStr) } catch (_: Exception) { TripRiskLevel.SAFE }
+                    val recs = (doc.get("aiRecommendations") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+
+                    TripSummary(
+                        id = doc.getString("id") ?: doc.id,
+                        startTime = doc.getLong("startTime") ?: System.currentTimeMillis(),
+                        endTime = doc.getLong("endTime") ?: System.currentTimeMillis(),
+                        durationSec = doc.getLong("durationSec") ?: 0L,
+                        totalAlerts = doc.getLong("totalAlerts")?.toInt() ?: 0,
+                        safetyScore = doc.getLong("safetyScore")?.toInt() ?: 100,
+                        scoreGrade = doc.getString("scoreGrade") ?: "A",
+                        riskLevel = riskLevel,
+                        perclosEstimatedPercent = doc.getDouble("perclosEstimatedPercent") ?: 0.0,
+                        averageEar = doc.getDouble("averageEar") ?: 0.28,
+                        aiDiagnosis = doc.getString("aiDiagnosis").orEmpty(),
+                        aiRecommendations = recs,
+                        topLocation = doc.getString("topLocation"),
+                        isLongDriveFatigue = doc.getBoolean("isLongDriveFatigue") ?: false
+                    )
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (list.isNotEmpty()) {
+                _savedTrips.value = list
+            }
+        }
+    }
+
     /** Thêm sự kiện cảnh báo mới và lưu bền vững lên Firestore */
     fun add(event: AlertEvent) {
         val uid = auth.currentUser?.uid.orEmpty()
@@ -139,9 +197,58 @@ object AlarmRepository {
                 "locationAddress" to eventWithUser.locationAddress
             )
             firestore.collection("alerts").document(eventWithUser.id).set(data)
+                .addOnSuccessListener {
+                    Log.d("FIREBASE_SYNC", "Da ghi thanh cong Alert vao collection 'alerts': ${eventWithUser.id}")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("FIREBASE_SYNC", "Loi ghi Alert len Firestore: ${e.message}", e)
+                }
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    /** Lưu kết quả phân tích chuyến đi (Trip AI Summary) lên Cloud Firestore */
+    fun saveTripSummary(summary: TripSummary) {
+        _latestTripSummary.value = summary
+        _savedTrips.value = listOf(summary) + _savedTrips.value
+
+        val uid = auth.currentUser?.uid.orEmpty()
+        try {
+            val data = hashMapOf(
+                "id" to summary.id,
+                "userId" to uid,
+                "startTime" to summary.startTime,
+                "endTime" to summary.endTime,
+                "durationSec" to summary.durationSec,
+                "totalAlerts" to summary.totalAlerts,
+                "safetyScore" to summary.safetyScore,
+                "scoreGrade" to summary.scoreGrade,
+                "riskLevel" to summary.riskLevel.name,
+                "perclosEstimatedPercent" to summary.perclosEstimatedPercent,
+                "averageEar" to summary.averageEar,
+                "aiDiagnosis" to summary.aiDiagnosis,
+                "aiRecommendations" to summary.aiRecommendations,
+                "topLocation" to (summary.topLocation ?: ""),
+                "isLongDriveFatigue" to summary.isLongDriveFatigue,
+                "createdAt" to System.currentTimeMillis()
+            )
+            firestore.collection("trips").document(summary.id)
+                .set(data, SetOptions.merge())
+                .addOnSuccessListener {
+                    Log.d("FIREBASE_SYNC", "Da luu bao cao chuyen di vao collection 'trips': ${summary.id}")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("FIREBASE_SYNC", "Loi luu trip len Firestore: ${e.message}")
+                }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /** Xóa tóm tắt chuyến đi hiện tại sau khi người dùng đóng dialog */
+    fun clearLatestTripSummary() {
+        _latestTripSummary.value = null
     }
 
     /** Tính toán thống kê 7 ngày qua để vẽ biểu đồ */

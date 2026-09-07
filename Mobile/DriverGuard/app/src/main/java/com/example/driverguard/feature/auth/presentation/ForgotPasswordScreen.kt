@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +28,7 @@ fun ForgotPasswordScreen(viewModel: AuthViewModel, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.c.bg)
+            .statusBarsPadding()
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {

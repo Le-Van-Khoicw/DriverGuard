@@ -93,7 +93,13 @@ fun AppNavigation() {
             VerifyEmailScreen(auth, { go(Routes.HOME, true) }) { auth.logout(); go(Routes.LOGIN, true) }
         }
         composable(Routes.HOME) {
-            MainScaffold(MainTab.HOME, ::select) { HomeScreen({ go(Routes.MONITORING) }, { go(Routes.HISTORY) }) }
+            MainScaffold(MainTab.HOME, ::select) {
+                HomeScreen(
+                    onStartMonitoring = { go(Routes.MONITORING) },
+                    onOpenHistory = { go(Routes.HISTORY) },
+                    onOpenVehicles = { go(Routes.VEHICLES) }
+                )
+            }
         }
         composable(Routes.MONITORING) {
             val vm: MonitoringViewModel = viewModel()

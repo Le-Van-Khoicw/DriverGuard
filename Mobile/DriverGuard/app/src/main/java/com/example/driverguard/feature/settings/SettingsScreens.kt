@@ -16,11 +16,29 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.CameraFront
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DirectionsBus
+import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.LocalShipping
+import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.RvHookup
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Vibration
+import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material.icons.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -28,6 +46,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -45,16 +64,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.driverguard.core.theme.ThemeManager
 import com.example.driverguard.core.theme.c
 import com.example.driverguard.core.theme.font
 import com.example.driverguard.feature.auth.domain.AuthUser
 import com.google.firebase.auth.FirebaseAuth
-
-import com.example.driverguard.core.theme.ThemeManager
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Màn hình Cài đặt chính
@@ -69,8 +88,8 @@ fun SettingsScreen(
     val c    = MaterialTheme.c
     val font = MaterialTheme.font
     val isDark by ThemeManager.isDarkMode.collectAsState()
-    var sound     by remember { mutableStateOf(true) }
-    var vibration by remember { mutableStateOf(true) }
+    var sound     by rememberSaveable { mutableStateOf(true) }
+    var vibration by rememberSaveable { mutableStateOf(true) }
 
     Column(
         modifier = Modifier
@@ -86,18 +105,20 @@ fun SettingsScreen(
         // ── Nhóm 1: Tài khoản ──
         SectionLabel("Tài khoản", c.textMuted.copy(alpha = 0.8f), font.sm)
         SettingsGroup {
-            SettingsRow(emoji = "👤", label = "Hồ sơ tài xế",   onClick = onProfile)
+            SettingsRow(icon = Icons.Outlined.Person, label = "Hồ sơ tài xế", iconTint = c.primary, iconBg = c.primaryBg, onClick = onProfile)
             SectionDivider()
-            SettingsRow(emoji = "📷", label = "Quản lý camera",  onClick = onDevices)
+            SettingsRow(icon = Icons.Outlined.Videocam, label = "Quản lý camera", iconTint = c.safe, iconBg = c.safeBg, onClick = onDevices)
             SectionDivider()
-            SettingsRow(emoji = "🚗", label = "Phương tiện",     onClick = onVehicles)
+            SettingsRow(icon = Icons.Outlined.DirectionsCar, label = "Phương tiện", iconTint = c.warning, iconBg = c.warningBg, onClick = onVehicles)
         }
 
         // ── Nhóm 2: Giao diện ──
         SectionLabel("Giao diện", c.textMuted.copy(alpha = 0.8f), font.sm)
         SettingsGroup {
             SwitchRow(
-                emoji   = if (isDark) "🌙" else "☀️",
+                icon    = if (isDark) Icons.Outlined.DarkMode else Icons.Outlined.LightMode,
+                iconTint = if (isDark) c.primary else c.warning,
+                iconBg  = if (isDark) c.primaryBg else c.warningBg,
                 label   = if (isDark) "Chế độ tối (Bật)" else "Chế độ tối (Tắt)",
                 checked = isDark,
                 onCheckedChange = { ThemeManager.setDarkMode(it) }
@@ -108,14 +129,18 @@ fun SettingsScreen(
         SectionLabel("Cảnh báo", c.textMuted.copy(alpha = 0.8f), font.sm)
         SettingsGroup {
             SwitchRow(
-                emoji   = "🔔",
+                icon    = Icons.Outlined.VolumeUp,
+                iconTint = c.primary,
+                iconBg  = c.primaryBg,
                 label   = "Âm thanh cảnh báo",
                 checked = sound,
                 onCheckedChange = { sound = it }
             )
             SectionDivider()
             SwitchRow(
-                emoji   = "📳",
+                icon    = Icons.Outlined.Vibration,
+                iconTint = c.primary,
+                iconBg  = c.primaryBg,
                 label   = "Rung cảnh báo",
                 checked = vibration,
                 onCheckedChange = { vibration = it }
@@ -133,6 +158,8 @@ fun SettingsScreen(
                 contentColor   = c.danger
             )
         ) {
+            Icon(Icons.Outlined.Logout, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
             Text("Đăng xuất", fontSize = font.base, fontWeight = font.semibold)
         }
     }
@@ -178,6 +205,7 @@ fun ProfileScreen(user: AuthUser? = null, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -350,10 +378,15 @@ fun ProfileScreen(user: AuthUser? = null, onBack: () -> Unit) {
 fun DevicesScreen(onBack: () -> Unit) {
     val c    = MaterialTheme.c
     val font = MaterialTheme.font
+    val profile by UserProfileRepository.profile.collectAsState()
+    val deviceName = profile.deviceName.ifBlank { com.example.driverguard.core.device.DeviceUtils.deviceName }
+    val deviceCode = profile.deviceCode.ifBlank { com.example.driverguard.core.device.DeviceUtils.deviceCode }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
@@ -363,11 +396,11 @@ fun DevicesScreen(onBack: () -> Unit) {
         Text("Quản lý camera", color = c.text, fontSize = font.xxl, fontWeight = font.bold)
         SectionLabel("Thiết bị đang liên kết", c.textMuted.copy(alpha = 0.8f), font.sm)
         SettingsGroup {
-            InfoRow(emoji = "📱", label = "Camera điện thoại", value = "Đang liên kết", valueColor = MaterialTheme.c.safe)
+            InfoRow(icon = Icons.Outlined.PhoneAndroid, iconTint = c.safe, iconBg = c.safeBg, label = "Thiết bị", value = deviceName, valueColor = MaterialTheme.c.safe)
             SectionDivider()
-            InfoRow(emoji = "🔑", label = "Mã thiết bị", value = "PHONE-001")
+            InfoRow(icon = Icons.Outlined.VpnKey, iconTint = c.primary, iconBg = c.primaryBg, label = "Mã phần cứng", value = deviceCode)
             SectionDivider()
-            InfoRow(emoji = "⚙️", label = "Nguồn video", value = "Android CameraX")
+            InfoRow(icon = Icons.Outlined.CameraFront, iconTint = c.primary, iconBg = c.primaryBg, label = "Nguồn cảm biến", value = "Camera Trước (CameraX)")
         }
     }
 }
@@ -387,19 +420,20 @@ fun VehiclesScreen(onBack: () -> Unit) {
     var isEditing    by rememberSaveable { mutableStateOf(false) }
     var saved        by rememberSaveable { mutableStateOf(false) }
 
-    val vehicleTypes = listOf(
-        "Ô tô con" to "🚗",
-        "Xe tải" to "🚚",
-        "Xe khách" to "🚌",
-        "Container" to "🚛"
+    val vehicleTypes = listOf<Pair<String, ImageVector>>(
+        "Ô tô con" to Icons.Outlined.DirectionsCar,
+        "Xe tải" to Icons.Outlined.LocalShipping,
+        "Xe khách" to Icons.Outlined.DirectionsBus,
+        "Container" to Icons.Outlined.RvHookup
     )
 
-    val currentEmoji = vehicleTypes.find { it.first == vehicleType }?.second ?: "🚗"
+    val currentIcon = vehicleTypes.find { it.first == vehicleType }?.second ?: Icons.Outlined.DirectionsCar
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -430,15 +464,15 @@ fun VehiclesScreen(onBack: () -> Unit) {
                 if (isEditing) {
                     // ── Chế độ chỉnh sửa ──
                     ProfileField(
-                        label = "Biển số xe",
-                        value = licensePlate,
-                        onValueChange = { licensePlate = it; saved = false }
+                        label = "Tên phương tiện",
+                        value = vehicleName,
+                        onValueChange = { vehicleName = it; saved = false }
                     )
 
                     ProfileField(
-                        label = "Tên phương tiện / Dòng xe",
-                        value = vehicleName,
-                        onValueChange = { vehicleName = it; saved = false }
+                        label = "Biển số xe",
+                        value = licensePlate,
+                        onValueChange = { licensePlate = it; saved = false }
                     )
 
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -447,15 +481,19 @@ fun VehiclesScreen(onBack: () -> Unit) {
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            vehicleTypes.forEach { (type, emoji) ->
+                            vehicleTypes.forEach { (type, icon) ->
                                 val selected = vehicleType == type
                                 FilterChip(
                                     selected = selected,
                                     onClick = { vehicleType = type; saved = false },
-                                    label = { Text("$emoji $type", fontSize = font.xs) },
+                                    leadingIcon = {
+                                        Icon(icon, contentDescription = type, modifier = Modifier.size(16.dp))
+                                    },
+                                    label = { Text(type, fontSize = font.xs) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = c.primaryBg,
-                                        selectedLabelColor = c.primary
+                                        selectedLabelColor = c.primary,
+                                        selectedLeadingIconColor = c.primary
                                     )
                                 )
                             }
@@ -476,7 +514,7 @@ fun VehiclesScreen(onBack: () -> Unit) {
                                     .background(c.primaryBg),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(currentEmoji, fontSize = font.xl)
+                                Icon(currentIcon, contentDescription = vehicleType, tint = c.primary, modifier = Modifier.size(26.dp))
                             }
                             Spacer(Modifier.width(12.dp))
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -497,9 +535,9 @@ fun VehiclesScreen(onBack: () -> Unit) {
 
                     HorizontalDivider(color = c.divider, thickness = 0.5.dp)
 
-                    InfoRow(emoji = "🏷️", label = "Biển số xe", value = licensePlate.ifBlank { "Chưa thiết lập" }, valueColor = c.text)
+                    InfoRow(icon = Icons.Outlined.Badge, iconTint = c.primary, iconBg = c.primaryBg, label = "Biển số xe", value = licensePlate.ifBlank { "Chưa thiết lập" }, valueColor = c.text)
                     SectionDivider()
-                    InfoRow(emoji = "🛡️", label = "Trạng thái bảo hộ", value = "Đã kích hoạt", valueColor = c.safe)
+                    InfoRow(icon = Icons.Outlined.Shield, iconTint = c.safe, iconBg = c.safeBg, label = "Trạng thái bảo hộ", value = "Đã kích hoạt", valueColor = c.safe)
                 }
             }
         }
@@ -507,7 +545,7 @@ fun VehiclesScreen(onBack: () -> Unit) {
         // ── Thông báo lưu ──
         if (saved) {
             Text(
-                "✅ Đã cập nhật phương tiện thành công!",
+                "Đã cập nhật phương tiện thành công!",
                 color = c.safe, fontSize = font.sm, fontWeight = font.medium
             )
         }
@@ -517,35 +555,23 @@ fun VehiclesScreen(onBack: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(
                     onClick = {
+                        UserProfileRepository.updateVehicle(licensePlate, vehicleName, vehicleType)
                         isEditing = false
                         saved = true
-                        UserProfileRepository.updateVehicle(vehicleName, licensePlate, vehicleType)
                     },
                     modifier = Modifier.weight(1f).height(48.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = c.primary,
-                        contentColor = c.textOnColor
-                    )
+                    colors = ButtonDefaults.buttonColors(containerColor = c.primary)
                 ) {
-                    Text("Lưu phương tiện", fontSize = font.base, fontWeight = font.semibold)
+                    Text("Lưu thông tin", fontSize = font.base, fontWeight = font.semibold)
                 }
                 Button(
-                    onClick = {
-                        isEditing = false
-                        saved = false
-                        licensePlate = profile.licensePlate
-                        vehicleName = profile.vehicleName
-                        vehicleType = profile.vehicleType
-                    },
+                    onClick = { isEditing = false },
                     modifier = Modifier.weight(1f).height(48.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = c.surface,
-                        contentColor = c.textMuted
-                    )
+                    colors = ButtonDefaults.buttonColors(containerColor = c.surface, contentColor = c.text)
                 ) {
-                    Text("Hủy", fontSize = font.base, fontWeight = font.semibold)
+                    Text("Hủy", fontSize = font.base)
                 }
             }
         } else {
@@ -553,12 +579,9 @@ fun VehiclesScreen(onBack: () -> Unit) {
                 onClick = { isEditing = true; saved = false },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = c.primaryBg,
-                    contentColor = c.primary
-                )
+                colors = ButtonDefaults.buttonColors(containerColor = c.primary)
             ) {
-                Text("✏️  Chỉnh sửa phương tiện", fontSize = font.base, fontWeight = font.semibold)
+                Text(if (profile.vehicleName.isBlank()) "Thiết lập phương tiện" else "Chỉnh sửa thông tin", fontSize = font.base, fontWeight = font.semibold)
             }
         }
     }
@@ -570,14 +593,8 @@ fun VehiclesScreen(onBack: () -> Unit) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun SectionLabel(text: String, color: androidx.compose.ui.graphics.Color, fontSize: androidx.compose.ui.unit.TextUnit) {
-    Text(
-        text       = text.uppercase(),
-        color      = color,
-        fontSize   = fontSize,
-        fontWeight = MaterialTheme.font.semibold,
-        letterSpacing = 1.sp
-    )
+fun SectionLabel(text: String, color: androidx.compose.ui.graphics.Color, fontSize: androidx.compose.ui.unit.TextUnit) {
+    Text(text = text, color = color, fontSize = fontSize, fontWeight = MaterialTheme.font.semibold)
 }
 
 @Composable
@@ -594,7 +611,13 @@ private fun SettingsGroup(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SettingsRow(emoji: String, label: String, onClick: () -> Unit) {
+private fun SettingsRow(
+    icon: ImageVector,
+    iconTint: androidx.compose.ui.graphics.Color,
+    iconBg: androidx.compose.ui.graphics.Color,
+    label: String,
+    onClick: () -> Unit
+) {
     val c    = MaterialTheme.c
     val font = MaterialTheme.font
     Card(
@@ -606,12 +629,20 @@ private fun SettingsRow(emoji: String, label: String, onClick: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(emoji, fontSize = font.md)
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(iconBg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = label, tint = iconTint, modifier = Modifier.size(20.dp))
+                }
                 Spacer(Modifier.width(12.dp))
                 Text(label, color = c.text, fontSize = font.base, fontWeight = font.medium)
             }
@@ -621,18 +652,33 @@ private fun SettingsRow(emoji: String, label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SwitchRow(emoji: String, label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun SwitchRow(
+    icon: ImageVector,
+    iconTint: androidx.compose.ui.graphics.Color,
+    iconBg: androidx.compose.ui.graphics.Color,
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
     val c    = MaterialTheme.c
     val font = MaterialTheme.font
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(emoji, fontSize = font.md)
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(iconBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = label, tint = iconTint, modifier = Modifier.size(20.dp))
+            }
             Spacer(Modifier.width(12.dp))
             Text(label, color = c.text, fontSize = font.base, fontWeight = font.medium)
         }
@@ -651,7 +697,9 @@ private fun SwitchRow(emoji: String, label: String, checked: Boolean, onCheckedC
 
 @Composable
 private fun InfoRow(
-    emoji: String,
+    icon: ImageVector,
+    iconTint: androidx.compose.ui.graphics.Color,
+    iconBg: androidx.compose.ui.graphics.Color,
     label: String,
     value: String,
     valueColor: androidx.compose.ui.graphics.Color = MaterialTheme.c.textMuted
@@ -661,16 +709,24 @@ private fun InfoRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(emoji, fontSize = font.md)
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(iconBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = label, tint = iconTint, modifier = Modifier.size(20.dp))
+            }
             Spacer(Modifier.width(12.dp))
             Text(label, color = c.text, fontSize = font.base, fontWeight = font.medium)
         }
-        Text(value, color = valueColor, fontSize = font.sm, fontWeight = font.regular)
+        Text(value, color = valueColor, fontSize = font.sm, fontWeight = font.medium)
     }
 }
 

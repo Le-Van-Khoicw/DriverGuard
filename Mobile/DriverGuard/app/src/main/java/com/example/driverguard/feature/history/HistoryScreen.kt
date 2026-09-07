@@ -16,22 +16,40 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.CheckCircleOutline
+import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.NearMe
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +58,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.driverguard.core.theme.c
 import com.example.driverguard.core.theme.font
+import com.example.driverguard.feature.monitoring.TripSummaryDialog
+import com.example.driverguard.feature.monitoring.ai.TripRiskLevel
+import com.example.driverguard.feature.monitoring.ai.TripSummary
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Màn hình Lịch sử & Biểu đồ thống kê 7 ngày — Đồng bộ Cloud Firestore
@@ -49,6 +70,9 @@ fun HistoryScreen(onAlertClick: (String) -> Unit) {
     val c      = MaterialTheme.c
     val font   = MaterialTheme.font
     val alerts by AlarmRepository.events.collectAsState()
+    val savedTrips by AlarmRepository.savedTrips.collectAsState()
+    var selectedTrip by remember { mutableStateOf<TripSummary?>(null) }
+
     val weeklyStats = AlarmRepository.getSevenDaysStats(alerts)
     val totalWeeklyAlerts = weeklyStats.sumOf { it.count }
 
@@ -92,6 +116,20 @@ fun HistoryScreen(onAlertClick: (String) -> Unit) {
             totalWeeklyAlerts = totalWeeklyAlerts
         )
 
+        // ── Báo cáo AI các chuyến đi đã phân tích (AI Trip Summaries) ──
+        if (savedTrips.isNotEmpty()) {
+            SectionLabel("Báo cáo chuyến đi gần nhất (AI)", c.textMuted.copy(alpha = 0.8f), font.sm)
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                savedTrips.take(5).forEach { trip ->
+                    TripSummaryCard(
+                        trip = trip,
+                        onClick = { selectedTrip = trip }
+                    )
+                }
+            }
+        }
+
         // ── Danh sách chi tiết các sự kiện ──
         SectionLabel("Danh sách sự kiện đã lưu", c.textMuted.copy(alpha = 0.8f), font.sm)
 
@@ -107,9 +145,22 @@ fun HistoryScreen(onAlertClick: (String) -> Unit) {
                         .fillMaxWidth()
                         .padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("😴", fontSize = font.xxl)
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(c.safeBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.CheckCircleOutline,
+                            contentDescription = null,
+                            tint = c.safe,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
                     Text(
                         "Chưa có cảnh báo nào",
                         color = c.text, fontSize = font.md, fontWeight = font.semibold,
@@ -135,6 +186,13 @@ fun HistoryScreen(onAlertClick: (String) -> Unit) {
         }
 
         Spacer(Modifier.height(10.dp))
+    }
+
+    if (selectedTrip != null) {
+        TripSummaryDialog(
+            summary = selectedTrip!!,
+            onDismiss = { selectedTrip = null }
+        )
     }
 }
 
@@ -167,10 +225,18 @@ private fun WeeklyBarChartCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("📊", fontSize = font.md)
-                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(c.primaryBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.BarChart, contentDescription = null, tint = c.primary, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
                     Text(
-                        "Tần suất buồn ngủ (7 ngày qua)",
+                        "Tần suất buồn ngủ (7 ngày)",
                         color = c.text,
                         fontSize = font.sm,
                         fontWeight = font.bold
@@ -258,10 +324,10 @@ private fun WeeklyBarChartCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val safetyStatus = when {
-                    totalWeeklyAlerts == 0 -> "🛡️ Lái xe an toàn tuyệt đối"
-                    totalWeeklyAlerts <= 3 -> "🟢 Trạng thái ổn định"
-                    totalWeeklyAlerts <= 6 -> "🟡 Cần nghỉ ngơi nhiều hơn"
-                    else -> "🔴 Nguy cơ ngủ gật cao!"
+                    totalWeeklyAlerts == 0 -> "Lái xe an toàn tuyệt đối"
+                    totalWeeklyAlerts <= 3 -> "Trạng thái ổn định"
+                    totalWeeklyAlerts <= 6 -> "Cần nghỉ ngơi nhiều hơn"
+                    else -> "Nguy cơ buồn ngủ cao!"
                 }
                 val statusColor = when {
                     totalWeeklyAlerts <= 3 -> c.safe
@@ -269,8 +335,12 @@ private fun WeeklyBarChartCard(
                     else -> c.danger
                 }
 
-                Text(safetyStatus, color = statusColor, fontSize = font.xs, fontWeight = font.semibold)
-                Text("Cập nhật theo thời gian thực", color = c.textSubtle, fontSize = font.xs)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Shield, contentDescription = null, tint = statusColor, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(safetyStatus, color = statusColor, fontSize = font.xs, fontWeight = font.semibold)
+                }
+                Text("Đồng bộ thời gian thực", color = c.textSubtle, fontSize = font.xs)
             }
         }
     }
@@ -328,12 +398,16 @@ private fun AlertCard(alert: AlertEvent, index: Int, onClick: () -> Unit) {
                 ) {
                     Text(alert.timeLabel, color = c.textSubtle, fontSize = font.xs, fontWeight = font.regular)
                     if (alert.latitude != null) {
-                        Text(
-                            "📍 ${alert.speedKmh?.toInt() ?: 0} km/h",
-                            color = c.primary,
-                            fontSize = font.xs,
-                            fontWeight = font.medium
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.NearMe, contentDescription = null, tint = c.primary, modifier = Modifier.size(12.dp))
+                            Spacer(Modifier.width(2.dp))
+                            Text(
+                                "${alert.speedKmh?.toInt() ?: 0} km/h",
+                                color = c.primary,
+                                fontSize = font.xs,
+                                fontWeight = font.medium
+                            )
+                        }
                     }
                 }
             }
@@ -358,6 +432,7 @@ fun AlertDetailScreen(alertId: String, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
@@ -382,10 +457,14 @@ fun AlertDetailScreen(alertId: String, onBack: () -> Unit) {
                 .background(c.dangerBg)
                 .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
-            Text(
-                "⚠️  Phát hiện buồn ngủ",
-                color = c.danger, fontSize = font.base, fontWeight = font.semibold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = c.danger, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "Phát hiện buồn ngủ",
+                    color = c.danger, fontSize = font.base, fontWeight = font.semibold
+                )
+            }
         }
 
         // ── Card số liệu sự kiện ──
@@ -423,17 +502,14 @@ fun AlertDetailScreen(alertId: String, onBack: () -> Unit) {
                 Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                val coords = if (alert.latitude != null && alert.longitude != null) {
-                    "${"%.5f".format(alert.latitude)}, ${"%.5f".format(alert.longitude)}"
-                } else {
-                    "Chưa xác định"
-                }
-
-                DetailRow(label = "Tọa độ GPS", value = coords)
+                val coord = if (alert.latitude != null && alert.longitude != null) {
+                    "%.5f, %.5f".format(alert.latitude, alert.longitude)
+                } else "Chưa có GPS"
+                DetailRow(label = "Tọa độ GPS",  value = coord)
                 DividerThin()
-                DetailRow(label = "Vận tốc xe", value = alert.speedKmh?.let { "${it.toInt()} km/h" } ?: "0 km/h")
+                DetailRow(label = "Vận tốc xe",  value = "${alert.speedKmh?.toInt() ?: 0} km/h")
                 DividerThin()
-                DetailRow(label = "Khu vực",    value = alert.locationAddress ?: "Đang cập nhật địa chỉ")
+                DetailRow(label = "Địa chỉ gần đúng", value = alert.locationAddress ?: "Chưa xác định")
             }
         }
 
@@ -441,25 +517,31 @@ fun AlertDetailScreen(alertId: String, onBack: () -> Unit) {
         if (alert.latitude != null && alert.longitude != null) {
             Button(
                 onClick = {
-                    val mapUri = Uri.parse("geo:${alert.latitude},${alert.longitude}?q=${alert.latitude},${alert.longitude}(Vị trí cảnh báo #${alert.id})")
-                    val intent = Intent(Intent.ACTION_VIEW, mapUri).apply {
+                    val lat = alert.latitude
+                    val lng = alert.longitude
+                    val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(Vị trí phát hiện buồn ngủ)")
+                    val mapIntent = Intent(Intent.ACTION_VIEW, uri).apply {
                         setPackage("com.google.android.apps.maps")
                     }
                     try {
-                        context.startActivity(intent)
+                        context.startActivity(mapIntent)
                     } catch (_: Exception) {
-                        val webMapUri = Uri.parse("https://www.google.com/maps/search/?api=1&query=${alert.latitude},${alert.longitude}")
-                        context.startActivity(Intent(Intent.ACTION_VIEW, webMapUri))
+                        val webUri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng")
+                        context.startActivity(Intent(Intent.ACTION_VIEW, webUri))
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape  = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = c.primaryBg,
-                    contentColor = c.primary
+                    containerColor = c.primary,
+                    contentColor   = c.textOnColor
                 )
             ) {
-                Text("🗺️  Xem vị trí trên Google Maps", fontSize = font.base, fontWeight = font.semibold)
+                Icon(Icons.Outlined.LocationOn, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Mở vị trí trên Google Maps", fontSize = font.base, fontWeight = font.semibold)
             }
         }
 
@@ -471,9 +553,13 @@ fun AlertDetailScreen(alertId: String, onBack: () -> Unit) {
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("💡 Lưu ý an toàn", color = c.warningText, fontSize = font.sm, fontWeight = font.bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Lightbulb, contentDescription = null, tint = c.warningText, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Lưu ý an toàn", color = c.warningText, fontSize = font.sm, fontWeight = font.bold)
+                }
                 Text(
-                    "Tọa độ GPS được ghi lại chính xác tại thời điểm mắt tài xế nhắm quá 3 giây. " +
+                    "Tọa độ GPS được ghi lại chính xác tại thời điểm mắt tài xế nhắm quá 2 giây. " +
                     "Dữ liệu này được lưu trữ vĩnh viễn trên Cloud Firestore và đồng bộ trực tiếp tới Web Admin.",
                     color = c.warningText, fontSize = font.sm, fontWeight = font.regular
                 )
@@ -514,6 +600,113 @@ private fun DetailRow(label: String, value: String) {
 @Composable
 private fun DividerThin() {
     HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.c.divider)
+}
+
+@Composable
+private fun TripSummaryCard(
+    trip: TripSummary,
+    onClick: () -> Unit
+) {
+    val c = MaterialTheme.c
+    val font = MaterialTheme.font
+
+    val badgeColor = when (trip.riskLevel) {
+        TripRiskLevel.SAFE -> c.safe
+        TripRiskLevel.CAUTION -> c.warning
+        TripRiskLevel.HIGH_RISK, TripRiskLevel.CRITICAL -> c.danger
+    }
+    val badgeBg = when (trip.riskLevel) {
+        TripRiskLevel.SAFE -> c.safeBg
+        TripRiskLevel.CAUTION -> c.warningBg
+        TripRiskLevel.HIGH_RISK, TripRiskLevel.CRITICAL -> c.dangerBg
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = c.card),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, c.border, RoundedCornerShape(16.dp))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(c.primaryBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.AutoAwesome, contentDescription = "AI", tint = c.primary, modifier = Modifier.size(16.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Chuyến: ${trip.durationLabel}",
+                        color = c.text,
+                        fontSize = font.sm,
+                        fontWeight = font.bold
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(badgeBg)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "${trip.safetyScore}đ · Hạng ${trip.scoreGrade}",
+                        color = badgeColor,
+                        fontSize = font.xs,
+                        fontWeight = font.bold
+                    )
+                }
+            }
+
+            Text(
+                text = trip.aiDiagnosis,
+                color = c.textMuted,
+                fontSize = font.xs,
+                maxLines = 2,
+                lineHeight = 16.sp
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = c.textSubtle, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "${trip.totalAlerts} cảnh báo · PERCLOS ${"%.1f".format(trip.perclosEstimatedPercent)}%",
+                        color = c.textSubtle,
+                        fontSize = font.xs
+                    )
+                }
+
+                Text(
+                    text = "Xem chi tiết AI ›",
+                    color = c.primary,
+                    fontSize = font.xs,
+                    fontWeight = font.bold
+                )
+            }
+        }
+    }
 }
 
 private val Int.sp get() = androidx.compose.ui.unit.TextUnit(this.toFloat(), androidx.compose.ui.unit.TextUnitType.Sp)

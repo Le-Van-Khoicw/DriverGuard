@@ -4,24 +4,19 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,7 +33,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.driverguard.core.theme.font
 import kotlinx.coroutines.delay
 
 @Composable
@@ -46,27 +40,27 @@ fun SplashScreen(onFinish: () -> Unit) {
     var startAnimation by remember { mutableStateOf(false) }
 
     val scale by animateFloatAsState(
-        targetValue = if (startAnimation) 1f else 0.7f,
-        animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+        targetValue = if (startAnimation) 1f else 0.85f,
+        animationSpec = tween(durationMillis = 800, easing = FastOutSlowInEasing),
         label = "scale"
     )
 
     val alpha by animateFloatAsState(
         targetValue = if (startAnimation) 1f else 0f,
-        animationSpec = tween(durationMillis = 900),
+        animationSpec = tween(durationMillis = 800),
         label = "alpha"
     )
 
     LaunchedEffect(Unit) {
         startAnimation = true
-        delay(2000L) // Chờ 2 giây hiển thị thương hiệu mượt mà
+        delay(1800L) // Chờ hiển thị thương hiệu mượt mà
         onFinish()
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0B0F19)), // Nền tối công nghệ sang trọng
+            .background(Color(0xFF0B0F19)), // Nền tối công nghệ sang trọng đồng nhất
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -77,46 +71,20 @@ fun SplashScreen(onFinish: () -> Unit) {
                 .alpha(alpha)
                 .padding(24.dp)
         ) {
-            // ── Khung Logo chính xác như thiết kế ──
+            // ── Khung Logo chuẩn: Khối vuông bo góc xanh dương + Khiên trắng tinh giản ──
             Box(
-                modifier = Modifier.size(130.dp),
+                modifier = Modifier
+                    .size(105.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color(0xFF2563EB)),
                 contentAlignment = Alignment.Center
             ) {
-                // Khối vuông bo góc xanh dương
-                Box(
-                    modifier = Modifier
-                        .size(105.dp)
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(Color(0xFF1D4ED8)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Icon khiên bảo vệ
-                    Icon(
-                        imageVector = Icons.Filled.Shield,
-                        contentDescription = "Shield",
-                        tint = Color.White,
-                        modifier = Modifier.size(54.dp)
-                    )
-                }
-
-                // Huy hiệu tròn xanh lá (Mắt AI) ở góc dưới bên phải
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .align(Alignment.BottomEnd)
-                        .offset(x = 2.dp, y = 2.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF16A34A))
-                        .border(3.dp, Color(0xFF0B0F19), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.RemoveRedEye,
-                        contentDescription = "Eye",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Filled.Shield,
+                    contentDescription = "DriverGuard Shield",
+                    tint = Color.White,
+                    modifier = Modifier.size(54.dp)
+                )
             }
 
             Spacer(Modifier.height(28.dp))
@@ -140,19 +108,19 @@ fun SplashScreen(onFinish: () -> Unit) {
                 fontWeight = FontWeight.Normal
             )
 
-            Spacer(Modifier.height(48.dp))
+            Spacer(Modifier.height(44.dp))
 
-            // ── Loading indicator nhẹ nhàng ──
+            // ── Loading indicator ──
             CircularProgressIndicator(
-                modifier = Modifier.size(26.dp),
-                color = Color(0xFF1D4ED8),
+                modifier = Modifier.size(24.dp),
+                color = Color(0xFF2563EB),
                 strokeWidth = 2.5.dp
             )
         }
 
         // ── Phiên bản ở góc đáy ──
         Text(
-            text = "Phiên bản 1.0 · AI Powered",
+            text = "Phiên bản 1.0 · AI Edge DMS",
             color = Color(0xFF475569),
             fontSize = 12.sp,
             modifier = Modifier

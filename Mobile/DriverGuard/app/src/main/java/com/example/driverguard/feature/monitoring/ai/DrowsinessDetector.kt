@@ -22,7 +22,7 @@ class ThresholdClassifier(var threshold: Float = 0.25f) : EyeStateClassifier {
 
 class DrowsinessDetector(
     val classifier: EyeStateClassifier = ThresholdClassifier(),
-    private val alarmAfterMs: Long = 3_000L   // 3 giây nhắm mắt mới kêu
+    private val alarmAfterMs: Long = 2_000L   // 2 giây nhắm mắt là kêu
 ) {
     private val extractor = TemporalFeatureExtractor()
     private var closedSince: Long? = null

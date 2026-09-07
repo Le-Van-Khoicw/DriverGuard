@@ -3,6 +3,7 @@ package com.example.driverguard.feature.auth.presentation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,6 +56,7 @@ fun RegisterScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.c.bg)
+            .statusBarsPadding()
             .verticalScroll(rememberScrollState())
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

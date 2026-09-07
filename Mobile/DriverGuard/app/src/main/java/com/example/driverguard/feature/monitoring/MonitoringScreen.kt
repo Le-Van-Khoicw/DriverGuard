@@ -30,10 +30,24 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Analytics
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.PictureInPictureAlt
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Psychology
+import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -49,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
@@ -60,6 +75,7 @@ import com.example.driverguard.core.location.LocationTracker
 import com.example.driverguard.core.pip.PipManager
 import com.example.driverguard.core.theme.c
 import com.example.driverguard.core.theme.font
+import com.example.driverguard.feature.monitoring.TripSummaryDialog
 import java.util.concurrent.Executors
 
 @Composable
@@ -252,19 +268,89 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                 fontWeight = font.bold
             )
 
-            // Badge trạng thái nhỏ gọn
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(statusBgColor)
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = statusLabel(state.status),
-                    color = statusColor,
-                    fontSize = font.xs,
-                    fontWeight = font.bold
-                )
+                if (isRunning) {
+                    val m = state.drivingDurationSec / 60
+                    val s = state.drivingDurationSec % 60
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(c.primaryBg)
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Timer, contentDescription = null, tint = c.primary, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "%02d:%02d".format(m, s),
+                                color = c.primary,
+                                fontSize = font.xs,
+                                fontWeight = font.bold
+                            )
+                        }
+                    }
+                }
+
+                // Badge trạng thái nhỏ gọn
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(statusBgColor)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = statusLabel(state.status),
+                        color = statusColor,
+                        fontSize = font.xs,
+                        fontWeight = font.bold
+                    )
+                }
+            }
+        }
+
+        // ── CẢNH BÁO NGUY HIỂM CAO / LÁI XE LÂU CẦN NGHỈ NGƠI ──
+        if (state.isCriticalRestRequired) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = c.dangerBg),
+                elevation = CardDefaults.cardElevation(0.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.5.dp, c.danger, RoundedCornerShape(16.dp))
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(c.danger.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = c.danger, modifier = Modifier.size(24.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "CẢNH BÁO: TÀI XẾ CẦN NGHỈ NGƠI!",
+                            color = c.danger,
+                            fontSize = font.sm,
+                            fontWeight = font.bold
+                        )
+                        Text(
+                            text = state.criticalRestReason,
+                            color = c.dangerText,
+                            fontSize = font.xs,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
             }
         }
 
@@ -291,7 +377,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                             .padding(12.dp)
                             .align(Alignment.TopStart)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black.copy(alpha = 0.65f))
+                            .background(Color.Black.copy(alpha = 0.6f))
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Row(
@@ -306,7 +392,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                             )
                             Text(
                                 "AI FACE MESH LIVE",
-                                color = c.textOnColor,
+                                color = Color.White,
                                 fontSize = font.xs,
                                 fontWeight = font.bold
                             )
@@ -316,21 +402,19 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(c.surface)
                             .padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text("📷", fontSize = font.xxl)
+                        Text(
+                            text = "DriverGuard Vision AI",
+                            color = c.text,
+                            fontSize = font.lg,
+                            fontWeight = font.bold
+                        )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Camera chưa hoạt động",
-                            color = c.text,
-                            fontSize = font.md,
-                            fontWeight = font.semibold
-                        )
-                        Text(
-                            "Bấm 'Bắt đầu giám sát' để kích hoạt AI",
+                            text = "Bấm 'Bắt đầu giám sát' để kích hoạt camera AI\nvà phát hiện dấu hiệu buồn ngủ thời gian thực",
                             color = c.textMuted,
                             fontSize = font.xs,
                             textAlign = TextAlign.Center
@@ -387,7 +471,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
         ) {
             MetricCard(
                 modifier = Modifier.weight(1f),
-                icon = "👁️",
+                icon = Icons.Outlined.Visibility,
                 title = "Chỉ số EAR",
                 value = state.ear?.let { "%.3f".format(it) } ?: "--",
                 subtitle = when {
@@ -403,7 +487,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
             )
             MetricCard(
                 modifier = Modifier.weight(1f),
-                icon = "🎯",
+                icon = Icons.Outlined.Psychology,
                 title = "Độ tin cậy",
                 value = state.confidence?.let { "${(it * 100).toInt()}%" } ?: "--",
                 subtitle = "Model AI",
@@ -417,7 +501,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
         ) {
             MetricCard(
                 modifier = Modifier.weight(1f),
-                icon = "🚨",
+                icon = Icons.Outlined.NotificationsActive,
                 title = "Số cảnh báo",
                 value = "${state.warningCount}",
                 subtitle = "Lần buồn ngủ",
@@ -425,7 +509,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
             )
             MetricCard(
                 modifier = Modifier.weight(1f),
-                icon = "⚡",
+                icon = Icons.Outlined.Speed,
                 title = "Vận tốc xe",
                 value = state.gpsLocation?.speedDisplay ?: "0 km/h",
                 subtitle = "Định vị GPS",
@@ -471,7 +555,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                         .background(c.primaryBg),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("📍", fontSize = font.lg)
+                    Icon(Icons.Outlined.LocationOn, contentDescription = "GPS", tint = c.primary, modifier = Modifier.size(24.dp))
                 }
 
                 Spacer(Modifier.width(14.dp))
@@ -527,6 +611,8 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                     contentColor = c.textOnColor
                 )
             ) {
+                Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = "Bắt đầu giám sát",
                     fontSize = font.base,
@@ -549,6 +635,8 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                         contentColor = c.danger
                     )
                 ) {
+                    Icon(Icons.Outlined.Stop, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = "Dừng",
                         fontSize = font.base,
@@ -567,13 +655,41 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                         contentColor = c.primary
                     )
                 ) {
+                    Icon(Icons.Outlined.PictureInPictureAlt, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "🔲 Cửa sổ nổi",
+                        text = "Cửa sổ nổi",
                         fontSize = font.base,
                         fontWeight = font.semibold
                     )
                 }
             }
+
+            // Nút thử nghiệm nhanh cho thầy cô / thuyết trình
+            OutlinedButton(
+                onClick = viewModel::simulateDrowsiness,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Outlined.Science, contentDescription = null, tint = c.warningText, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Mô phỏng buồn ngủ (Demo)",
+                    color = c.warningText,
+                    fontSize = font.sm,
+                    fontWeight = font.semibold
+                )
+            }
+        }
+
+        // ── DIALOG BÁO CÁO AI TỔNG KẾT SAU CHUYẾN ĐI ──
+        if (state.tripSummary != null) {
+            TripSummaryDialog(
+                summary = state.tripSummary!!,
+                onDismiss = viewModel::dismissTripSummary
+            )
         }
     }
 }
@@ -584,7 +700,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
 @Composable
 private fun MetricCard(
     modifier: Modifier = Modifier,
-    icon: String,
+    icon: ImageVector,
     title: String,
     value: String,
     subtitle: String,
@@ -612,7 +728,20 @@ private fun MetricCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(title, color = c.textMuted, fontSize = font.xs, fontWeight = font.medium)
-                Text(icon, fontSize = font.sm)
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(accentColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = accentColor,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
 
             Text(

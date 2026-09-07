@@ -2,6 +2,7 @@ package com.example.driverguard.feature.home.persentation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shield
@@ -29,9 +31,13 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,11 +50,13 @@ import com.example.driverguard.core.theme.font
 fun HomeScreen(
     onStartMonitoring: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenVehicles: () -> Unit = {},
     viewModel: HomeViewModel = viewModel()
 ) {
     val c = MaterialTheme.c
     val font = MaterialTheme.font
     val state by viewModel.uiState.collectAsState()
+    var dismissedVehicleBanner by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -95,7 +103,80 @@ fun HomeScreen(
             }
         }
 
-        // ── Camera Info Card ──
+        // ── Banner Nhắc nhở Thiết lập xe nếu chưa cấu hình ──
+        if (!state.isVehicleConfigured && !dismissedVehicleBanner) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = c.warningBg),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, c.warning.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(c.warning),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.DirectionsCar,
+                                contentDescription = "Vehicle",
+                                tint = c.textOnColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Chưa thiết lập phương tiện",
+                                color = c.text,
+                                fontSize = font.sm,
+                                fontWeight = font.bold
+                            )
+                            Text(
+                                text = "Nhập tên và biển số xe để cá nhân hóa hệ thống",
+                                color = c.textMuted,
+                                fontSize = font.xs
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { dismissedVehicleBanner = true }) {
+                            Text("Để sau", color = c.textMuted, fontSize = font.xs)
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        Button(
+                            onClick = onOpenVehicles,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = c.primary,
+                                contentColor = c.textOnColor
+                            )
+                        ) {
+                            Text("Thiết lập ngay", fontSize = font.xs, fontWeight = font.semibold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Camera Info Card (Đọc tên máy và mã thiết bị thật) ──
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -128,7 +209,7 @@ fun HomeScreen(
 
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(
-                        text = "Camera đang liên kết",
+                        text = "Thiết bị giám sát",
                         color = c.textMuted,
                         fontSize = font.xs,
                         fontWeight = font.medium
@@ -191,14 +272,19 @@ fun HomeScreen(
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text("Trạng thái xe", color = c.textMuted, fontSize = font.xs)
+                    Text("Phương tiện", color = c.textMuted, fontSize = font.xs)
                     Text(
-                        text = "Sẵn sàng",
+                        text = state.vehicleName.ifBlank { "Chưa đặt tên" },
                         color = c.primary,
-                        fontSize = font.xl,
-                        fontWeight = font.bold
+                        fontSize = font.md,
+                        fontWeight = font.bold,
+                        maxLines = 1
                     )
-                    Text("Bảo hộ AI tự động", color = c.textSubtle, fontSize = font.xs)
+                    Text(
+                        text = if (state.isVehicleConfigured) "Bảo hộ AI tự động" else "Chạm để cài đặt",
+                        color = c.textSubtle,
+                        fontSize = font.xs
+                    )
                 }
             }
         }
@@ -223,7 +309,7 @@ fun HomeScreen(
                 Icon(
                     imageVector = Icons.Filled.PlayArrow,
                     contentDescription = "Start",
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(20.dp)
                 )
                 Text(
                     text = "Bắt đầu giám sát",
@@ -233,10 +319,11 @@ fun HomeScreen(
             }
         }
 
-        // ── Latest Alert Card ──
+        // ── Recent Activity Card ──
         Card(
-            onClick = onOpenHistory,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOpenHistory() },
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.cardColors(containerColor = c.card),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -258,28 +345,32 @@ fun HomeScreen(
                     Icon(
                         imageVector = Icons.Filled.NotificationsActive,
                         contentDescription = "Alert",
-                        tint = c.warningText,
+                        tint = c.warning,
                         modifier = Modifier.size(20.dp)
                     )
                 }
 
                 Spacer(Modifier.width(14.dp))
 
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = "Cảnh báo gần nhất",
+                        text = "Chuyến đi gần nhất",
                         color = c.text,
                         fontSize = font.sm,
                         fontWeight = font.semibold
                     )
                     Text(
-                        text = state.latestAlert ?: "Chưa có cảnh báo nào trong ngày",
+                        text = state.latestAlert,
                         color = c.textMuted,
                         fontSize = font.xs
                     )
                 }
 
-                Text("›", color = c.textMuted, fontSize = font.xl)
+                Text(
+                    text = "›",
+                    color = c.textMuted,
+                    fontSize = font.xl
+                )
             }
         }
     }
