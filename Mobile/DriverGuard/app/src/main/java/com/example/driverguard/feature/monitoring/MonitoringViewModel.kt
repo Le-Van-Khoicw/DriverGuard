@@ -51,6 +51,7 @@ class MonitoringViewModel : ViewModel() {
     private val detector   = DrowsinessDetector(classifier = classifier)
 
     private var alertWasActive = false
+    private var lastAlertTimeWallMs = 0L
     private var sessionStartWallTimeMs: Long = 0L
     private val alertsInThisSession = mutableListOf<AlertEvent>()
     private var timerJob: Job? = null
@@ -157,10 +158,12 @@ class MonitoringViewModel : ViewModel() {
 
         // ── Giai đoạn MONITORING / DROWSY ────────────────────────────────────
         val result   = detector.process(ear, nowMs)
-        val newAlert = result.shouldAlert && !alertWasActive
-        alertWasActive = result.shouldAlert
+        val nowWallTime = System.currentTimeMillis()
+        val isCooldownOver = (nowWallTime - lastAlertTimeWallMs) > 5_000L
+        val newAlert = result.shouldAlert && (!alertWasActive && isCooldownOver)
 
-        if (newAlert) {
+        if (result.shouldAlert && isCooldownOver && !alertWasActive) {
+            lastAlertTimeWallMs = nowWallTime
             val gps = _uiState.value.gpsLocation
             val newAlertEvent = AlertEvent(
                 ear               = ear?.toDouble() ?: 0.0,
@@ -174,6 +177,7 @@ class MonitoringViewModel : ViewModel() {
             alertsInThisSession.add(newAlertEvent)
             AlarmRepository.add(newAlertEvent)
         }
+        alertWasActive = result.shouldAlert
 
         val newWarningCount = _uiState.value.warningCount + if (newAlert) 1 else 0
         val isCritical = newWarningCount >= 3 || _uiState.value.isCriticalRestRequired

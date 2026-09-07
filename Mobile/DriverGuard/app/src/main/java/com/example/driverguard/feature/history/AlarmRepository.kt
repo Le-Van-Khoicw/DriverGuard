@@ -27,7 +27,8 @@ data class AlertEvent(
     val latitude: Double? = null,            // Vĩ độ GPS
     val longitude: Double? = null,           // Kinh độ GPS
     val speedKmh: Float? = null,             // Tốc độ xe khi buồn ngủ
-    val locationAddress: String? = null      // Tên địa chỉ/đoạn đường
+    val locationAddress: String? = null,     // Tên địa chỉ/đoạn đường
+    val imageUrl: String? = null             // Ảnh minh chứng khuôn mặt
 ) {
     val timeLabel: String
         get() {
@@ -113,7 +114,8 @@ object AlarmRepository {
                         latitude = doc.getDouble("latitude"),
                         longitude = doc.getDouble("longitude"),
                         speedKmh = doc.getDouble("speedKmh")?.toFloat(),
-                        locationAddress = doc.getString("locationAddress")
+                        locationAddress = doc.getString("locationAddress"),
+                        imageUrl = doc.getString("imageUrl")
                     )
                 } catch (_: Exception) {
                     null
@@ -194,7 +196,8 @@ object AlarmRepository {
                 "latitude" to eventWithUser.latitude,
                 "longitude" to eventWithUser.longitude,
                 "speedKmh" to eventWithUser.speedKmh,
-                "locationAddress" to eventWithUser.locationAddress
+                "locationAddress" to eventWithUser.locationAddress,
+                "imageUrl" to eventWithUser.imageUrl
             )
             firestore.collection("alerts").document(eventWithUser.id).set(data)
                 .addOnSuccessListener {
