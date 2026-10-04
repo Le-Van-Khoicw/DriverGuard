@@ -32,7 +32,9 @@ data class MonitoringUiState(
     val warningCount: Int = 0,
     val message: String = "Camera chưa bắt đầu giám sát",
     val earBaseline: Double? = null,          // EAR mắt mở của người này
-    val calibrationProgress: Float = 0f,     // 0.0 → 1.0 trong 3 giây calibration
+    val earThreshold: Double? = null,         // Ngưỡng kích hoạt cảnh báo nhắm mắt (baseline * 0.75)
+    val calibrationProgress: Float = 0f,     // 0.0 → 1.0 trong 5 giây calibration
+    val calibrationSecondsLeft: Int = 5,      // Đếm ngược 5..4..3..2..1
     val gpsLocation: GpsLocation? = null,      // Tọa độ và tốc độ xe hiện tại
     val drivingDurationSec: Long = 0L,        // Thời gian lái xe liên tục của phiên
     val isCriticalRestRequired: Boolean = false, // Cảnh báo khẩn cấp: yêu cầu tấp lề nghỉ ngơi!
@@ -42,7 +44,7 @@ data class MonitoringUiState(
 
 class MonitoringViewModel : ViewModel() {
     // ── EAR calibration ──────────────────────────────────────────────────────
-    private val calibrationDurationMs = 3_000L
+    private val calibrationDurationMs = 5_000L // 5 giây đầu: đo baseline mắt mở tự nhiên
     private val earSamplesForCalib    = mutableListOf<Float>()
     private var calibStartMs: Long    = 0L
     private var isCalibrated          = false
@@ -71,9 +73,13 @@ class MonitoringViewModel : ViewModel() {
 
         _uiState.value = _uiState.value.copy(
             status = MonitoringStatus.CALIBRATING,
-            message = "Đang đo EAR cơ sở… hãy nhìn thẳng vào camera",
+            message = "Đang đo EAR cơ sở (5s)… hãy nhìn thẳng vào camera",
             warningCount = 0,
             drivingDurationSec = 0L,
+            calibrationProgress = 0f,
+            calibrationSecondsLeft = 5,
+            earBaseline = null,
+            earThreshold = null,
             isCriticalRestRequired = false,
             criticalRestReason = "",
             tripSummary = null
@@ -122,13 +128,14 @@ class MonitoringViewModel : ViewModel() {
 
         val nowMs = android.os.SystemClock.elapsedRealtime()
 
-        // ── Giai đoạn CALIBRATING ────────────────────────────────────────────
+        // ── Giai đoạn CALIBRATING (5 giây) ───────────────────────────────────
         if (status == MonitoringStatus.CALIBRATING) {
             if (ear != null && ear > 0.15f) {
                 earSamplesForCalib.add(ear)
             }
             val elapsed  = nowMs - calibStartMs
             val progress = (elapsed.toFloat() / calibrationDurationMs).coerceIn(0f, 1f)
+            val secondsLeft = kotlin.math.ceil((calibrationDurationMs - elapsed) / 1000f).toInt().coerceAtLeast(1)
 
             if (elapsed >= calibrationDurationMs) {
                 val baseline = if (earSamplesForCalib.isNotEmpty())
@@ -136,21 +143,25 @@ class MonitoringViewModel : ViewModel() {
                 else
                     0.25
 
-                classifier.threshold = (baseline * 0.75).toFloat()
+                val calculatedThreshold = (baseline * 0.75).toFloat()
+                classifier.threshold = calculatedThreshold
                 isCalibrated = true
                 detector.reset()
 
                 _uiState.value = _uiState.value.copy(
                     status             = MonitoringStatus.MONITORING,
                     earBaseline        = baseline,
+                    earThreshold       = calculatedThreshold.toDouble(),
                     calibrationProgress = 1f,
-                    message            = "Baseline EAR: ${"%.3f".format(baseline)} · Ngưỡng: ${"%.3f".format(classifier.threshold)}"
+                    calibrationSecondsLeft = 0,
+                    message            = "Baseline: ${"%.3f".format(baseline)} · Ngưỡng buồn ngủ: ${"%.3f".format(calculatedThreshold)}"
                 )
             } else {
                 _uiState.value = _uiState.value.copy(
                     ear                 = ear?.toDouble(),
                     calibrationProgress = progress,
-                    message             = "Đang hiệu chỉnh… (${(progress * 100).toInt()}%)"
+                    calibrationSecondsLeft = secondsLeft,
+                    message             = "Đang hiệu chỉnh mắt… còn ${secondsLeft}s"
                 )
             }
             return

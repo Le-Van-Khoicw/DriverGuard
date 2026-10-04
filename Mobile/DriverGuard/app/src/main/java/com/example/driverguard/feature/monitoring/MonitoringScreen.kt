@@ -398,6 +398,49 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                             )
                         }
                     }
+
+                    // ── Overlay Đếm ngược & Hướng dẫn khi Đang Hiệu Chỉnh (5 giây) ──
+                    if (state.status == MonitoringStatus.CALIBRATING) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.55f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(CircleShape)
+                                        .background(c.primary),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        "${state.calibrationSecondsLeft}s",
+                                        color = Color.White,
+                                        fontSize = font.xl,
+                                        fontWeight = font.black
+                                    )
+                                }
+                                Text(
+                                    "NHÌN THẲNG VÀO CAMERA",
+                                    color = Color.White,
+                                    fontSize = font.md,
+                                    fontWeight = font.black,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    "Giữ mắt mở tự nhiên để AI đo ngưỡng cá nhân",
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    fontSize = font.xs,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
                 } else {
                     Column(
                         modifier = Modifier
@@ -424,7 +467,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
             }
         }
 
-        // ── Thanh tiến trình hiệu chỉnh EAR (3 giây đầu) ──
+        // ── Thanh tiến trình hiệu chỉnh EAR (5 giây đầu) ──
         if (state.status == MonitoringStatus.CALIBRATING) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -432,12 +475,24 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                 colors = CardDefaults.cardColors(containerColor = c.primaryBg)
             ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        "🎯 Đang hiệu chỉnh EAR cơ sở cá nhân: ${(state.calibrationProgress * 100).toInt()}%",
-                        color = c.primary,
-                        fontSize = font.sm,
-                        fontWeight = font.bold
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "🎯 Đang hiệu chỉnh EAR cơ sở: còn ${state.calibrationSecondsLeft}s",
+                            color = c.primary,
+                            fontSize = font.sm,
+                            fontWeight = font.bold
+                        )
+                        Text(
+                            "${(state.calibrationProgress * 100).toInt()}%",
+                            color = c.primary,
+                            fontSize = font.sm,
+                            fontWeight = font.bold
+                        )
+                    }
                     androidx.compose.material3.LinearProgressIndicator(
                         progress = { state.calibrationProgress },
                         modifier = Modifier
@@ -448,9 +503,39 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                         trackColor = c.card
                     )
                     Text(
-                        "Hãy nhìn thẳng vào camera và giữ mắt mở tự nhiên",
+                        "Hãy nhìn thẳng kính lái và giữ mắt mở tự nhiên",
                         color = c.primaryText,
                         fontSize = font.xs
+                    )
+                }
+            }
+        }
+
+        // ── Thông báo hiệu chỉnh thành công (Hiển thị ngưỡng cá nhân) ──
+        if (state.status == MonitoringStatus.MONITORING && state.earBaseline != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = c.safeBg)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "🎯 Đã hiệu chuẩn:",
+                        color = c.safeText,
+                        fontSize = font.xs,
+                        fontWeight = font.bold
+                    )
+                    Text(
+                        "Baseline: ${"%.3f".format(state.earBaseline)} · Ngưỡng buồn ngủ: ${"%.3f".format(state.earThreshold ?: (state.earBaseline!! * 0.75))}",
+                        color = c.safe,
+                        fontSize = font.xs,
+                        fontWeight = font.semibold
                     )
                 }
             }
@@ -465,6 +550,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
         )
 
         // ── Bảng Điều Khiển Chỉ Số AI (4 Grid Cards) ──
+        val currentThreshold = state.earThreshold ?: 0.20
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -476,12 +562,12 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                 value = state.ear?.let { "%.3f".format(it) } ?: "--",
                 subtitle = when {
                     state.ear == null -> "Chưa phát hiện"
-                    state.ear!! < 0.20 -> "⚠️ Nhắm mắt"
-                    else -> "Bình thường"
+                    state.ear!! < currentThreshold -> "⚠️ Nhắm mắt"
+                    else -> "Mở (Ngưỡng ${"%.2f".format(currentThreshold)})"
                 },
                 accentColor = when {
                     state.ear == null -> c.textMuted
-                    state.ear!! < 0.20 -> c.danger
+                    state.ear!! < currentThreshold -> c.danger
                     else -> c.safe
                 }
             )
