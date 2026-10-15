@@ -36,18 +36,24 @@ import com.example.driverguard.core.theme.font
 fun RegisterScreen(
     viewModel: AuthViewModel,
     onBackToLogin: () -> Unit,
+    onPendingApproval: () -> Unit,
+    onAccountLocked: () -> Unit,
     onVerificationRequired: () -> Unit,
     onRegistrationCompleted: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(
-        uiState.isAuthenticated,
         uiState.canEnterApp,
+        uiState.isAccountLocked,
+        uiState.isPendingApproval,
+        uiState.isAuthenticated,
         uiState.isLoading
     ) {
         when {
             uiState.canEnterApp -> onRegistrationCompleted()
+            uiState.isAccountLocked -> onAccountLocked()
+            uiState.isPendingApproval -> onPendingApproval()
             uiState.isAuthenticated && !uiState.isLoading -> onVerificationRequired()
         }
     }
