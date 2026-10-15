@@ -16,10 +16,12 @@ import com.example.driverguard.feature.auth.data.FirebaseAuthRepository
 import com.example.driverguard.feature.auth.data.GoogleAuthClient
 import com.example.driverguard.feature.auth.monitoring.MonitoringScreen
 import com.example.driverguard.feature.auth.monitoring.MonitoringViewModel
+import com.example.driverguard.feature.auth.presentation.AccountLockedScreen
 import com.example.driverguard.feature.auth.presentation.AuthViewModel
 import com.example.driverguard.feature.auth.presentation.AuthViewModelFactory
 import com.example.driverguard.feature.auth.presentation.ForgotPasswordScreen
 import com.example.driverguard.feature.auth.presentation.LoginScreen
+import com.example.driverguard.feature.auth.presentation.PendingApprovalScreen
 import com.example.driverguard.feature.auth.presentation.RegisterScreen
 import com.example.driverguard.feature.auth.presentation.VerifyEmailScreen
 import com.example.driverguard.feature.history.AlertDetailScreen
@@ -30,11 +32,13 @@ import com.example.driverguard.feature.settings.ProfileScreen
 import com.example.driverguard.feature.settings.SettingsScreen
 import com.example.driverguard.feature.settings.VehiclesScreen
 import com.example.driverguard.feature.splash.SplashScreen
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private object Routes {
     const val SPLASH = "splash"
     const val LOGIN = "login"; const val REGISTER = "register"; const val VERIFY = "verify"; const val FORGOT = "forgot"
+    const val PENDING = "pending"; const val LOCKED = "locked"
     const val HOME = "home"; const val MONITORING = "monitoring"; const val HISTORY = "history"
     const val ALERT = "alert/{alertId}"; const val SETTINGS = "settings"
     const val PROFILE = "profile"; const val DEVICES = "devices"; const val VEHICLES = "vehicles"
@@ -60,22 +64,44 @@ fun AppNavigation() {
         MainTab.HOME -> Routes.HOME; MainTab.MONITORING -> Routes.MONITORING
         MainTab.HISTORY -> Routes.HISTORY; MainTab.SETTINGS -> Routes.SETTINGS
     })
+    fun routeForCurrentState(): String {
+        val state = auth.uiState.value
+        return when {
+            state.canEnterApp -> Routes.HOME
+            state.isAccountLocked -> Routes.LOCKED
+            state.isPendingApproval -> Routes.PENDING
+            state.isAuthenticated -> Routes.VERIFY
+            else -> Routes.LOGIN
+        }
+    }
 
     NavHost(navController = nav, startDestination = Routes.SPLASH) {
         composable(Routes.SPLASH) {
             SplashScreen {
-                val nextRoute = when {
-                    authState.canEnterApp -> Routes.HOME
-                    authState.isAuthenticated -> Routes.VERIFY
-                    else -> Routes.LOGIN
+                scope.launch {
+                    // Nếu đã đăng nhập, đợi tối đa 2s để accountStatus kịp tải từ Firestore
+                    if (auth.uiState.value.isAuthenticated) {
+                        var waited = 0
+                        while (!auth.uiState.value.isAccountStatusLoaded && waited < 2000) {
+                            delay(50)
+                            waited += 50
+                        }
+                    }
+                    go(routeForCurrentState(), clear = true)
                 }
-                go(nextRoute, clear = true)
             }
         }
         composable(Routes.LOGIN) {
             val activity = context as? android.app.Activity
-            LoginScreen(auth, { go(Routes.HOME, true) }, { go(Routes.VERIFY, true) },
-                { go(Routes.REGISTER) }, { go(Routes.FORGOT) }, {
+            LoginScreen(
+                viewModel = auth,
+                onLoginSuccess = { go(Routes.HOME, true) },
+                onPendingApproval = { go(Routes.PENDING, true) },
+                onAccountLocked = { go(Routes.LOCKED, true) },
+                onVerificationRequired = { go(Routes.VERIFY, true) },
+                onNavigateToRegister = { go(Routes.REGISTER) },
+                onNavigateToForgotPassword = { go(Routes.FORGOT) },
+                onGoogleLoginClick = {
                     if (activity != null) {
                         scope.launch {
                             google.signIn(activity)
@@ -83,14 +109,38 @@ fun AppNavigation() {
                                 .onFailure(auth::onGoogleSignInError)
                         }
                     }
-                })
+                }
+            )
         }
         composable(Routes.REGISTER) {
-            RegisterScreen(auth, { nav.popBackStack() }, { go(Routes.VERIFY, true) }, { go(Routes.HOME, true) })
+            RegisterScreen(
+                viewModel = auth,
+                onBackToLogin = { nav.popBackStack() },
+                onPendingApproval = { go(Routes.PENDING, true) },
+                onAccountLocked = { go(Routes.LOCKED, true) },
+                onVerificationRequired = { go(Routes.VERIFY, true) },
+                onRegistrationCompleted = { go(Routes.HOME, true) }
+            )
         }
         composable(Routes.FORGOT) { ForgotPasswordScreen(auth) { nav.popBackStack() } }
         composable(Routes.VERIFY) {
-            VerifyEmailScreen(auth, { go(Routes.HOME, true) }) { auth.logout(); go(Routes.LOGIN, true) }
+            VerifyEmailScreen(
+                viewModel = auth,
+                onVerificationCompleted = { go(Routes.HOME, true) },
+                onPendingApproval = { go(Routes.PENDING, true) },
+                onAccountLocked = { go(Routes.LOCKED, true) },
+                onUseAnotherAccount = { auth.logout(); go(Routes.LOGIN, true) }
+            )
+        }
+        composable(Routes.PENDING) {
+            PendingApprovalScreen { auth.logout(); go(Routes.LOGIN, true) }
+        }
+        composable(Routes.LOCKED) {
+            AccountLockedScreen(
+                isRejected = authState.isAccountRejected,
+                rejectReason = authState.rejectReason,
+                onLogout = { auth.logout(); go(Routes.LOGIN, true) }
+            )
         }
         composable(Routes.HOME) {
             MainScaffold(MainTab.HOME, ::select) {

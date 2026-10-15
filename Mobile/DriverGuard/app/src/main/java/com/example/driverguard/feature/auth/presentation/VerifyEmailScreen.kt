@@ -31,15 +31,24 @@ import com.example.driverguard.core.theme.font
 fun VerifyEmailScreen(
     viewModel: AuthViewModel,
     onVerificationCompleted: () -> Unit,
+    onPendingApproval: () -> Unit,
+    onAccountLocked: () -> Unit,
     onUseAnotherAccount: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val email = uiState.currentUser?.email ?: uiState.email
 
-    LaunchedEffect(uiState.canEnterApp) {
-        if (uiState.canEnterApp) onVerificationCompleted()
+    LaunchedEffect(
+        uiState.canEnterApp,
+        uiState.isAccountLocked,
+        uiState.isPendingApproval
+    ) {
+        when {
+            uiState.canEnterApp -> onVerificationCompleted()
+            uiState.isAccountLocked -> onAccountLocked()
+            uiState.isPendingApproval -> onPendingApproval()
+        }
     }
-
     Column(
         modifier = Modifier
             .fillMaxSize()

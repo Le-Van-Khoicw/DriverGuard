@@ -3,29 +3,42 @@ package com.example.driverguard.feature.auth.presentation
 import com.example.driverguard.feature.auth.domain.AuthUser
 
 data class AuthUiState(
-    // Dữ liệu nhập
     val email: String = "",
     val password: String = "",
     val confirmPassword: String = "",
 
-    // Trạng thái xử lý chung
     val isLoading: Boolean = false,
 
-    // Người dùng hiện tại
     val currentUser: AuthUser? = null,
 
-    // Trạng thái xác minh tài khoản sau khi đăng ký
     val isVerificationEmailSent: Boolean = false,
-
-    // Trạng thái gửi email đặt lại mật khẩu
     val isPasswordResetEmailSent: Boolean = false,
 
-    // Thông báo lỗi
+    // Đồng bộ từ UserProfileRepository (Firestore drivers/{uid}.accountStatus)
+    val accountStatus: String = "",
+    val rejectReason: String = "",
+    val isAccountStatusLoaded: Boolean = false,
+
     val errorMessage: String? = null
 ) {
     val isAuthenticated: Boolean
         get() = currentUser != null
 
-    val canEnterApp: Boolean
+    private val isEmailOk: Boolean
         get() = currentUser?.isEmailVerified == true
+
+    /** Email đã xác minh VÀ admin đã duyệt (accountStatus == "active"). */
+    val canEnterApp: Boolean
+        get() = isEmailOk && accountStatus == "active"
+
+    /** Bị chặn vào app: "locked" hoặc "rejected" (chung màn hình, khác nội dung). */
+    val isAccountLocked: Boolean
+        get() = isEmailOk && isAccountStatusLoaded && (accountStatus == "locked" || accountStatus == "rejected")
+
+    /** Chỉ dùng để chọn nội dung màn hình bị chặn. */
+    val isAccountRejected: Boolean
+        get() = isEmailOk && isAccountStatusLoaded && accountStatus == "rejected"
+
+    val isPendingApproval: Boolean
+        get() = isEmailOk && isAccountStatusLoaded && accountStatus != "active" && accountStatus != "locked" && accountStatus != "rejected"
 }

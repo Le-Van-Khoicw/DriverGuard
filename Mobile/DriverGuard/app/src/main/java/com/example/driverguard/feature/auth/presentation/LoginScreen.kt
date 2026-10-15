@@ -43,6 +43,8 @@ import com.example.driverguard.core.theme.font
 fun LoginScreen(
     viewModel: AuthViewModel,
     onLoginSuccess: () -> Unit,
+    onPendingApproval: () -> Unit,
+    onAccountLocked: () -> Unit,
     onVerificationRequired: () -> Unit,
     onNavigateToRegister: () -> Unit,
     onNavigateToForgotPassword: () -> Unit,
@@ -51,9 +53,16 @@ fun LoginScreen(
     val uiState by viewModel.uiState.collectAsState()
     var isPasswordVisible by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(uiState.isAuthenticated, uiState.canEnterApp) {
+    LaunchedEffect(
+        uiState.canEnterApp,
+        uiState.isAccountLocked,
+        uiState.isPendingApproval,
+        uiState.isAuthenticated
+    ) {
         when {
             uiState.canEnterApp -> onLoginSuccess()
+            uiState.isAccountLocked -> onAccountLocked()
+            uiState.isPendingApproval -> onPendingApproval()
             uiState.isAuthenticated -> onVerificationRequired()
         }
     }
