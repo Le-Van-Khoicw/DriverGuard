@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.example.driverguard.feature.settings.UserProfileRepository
 
 class AuthViewModel(
     private val authRepository: AuthRepository
@@ -22,6 +23,20 @@ class AuthViewModel(
         )
     )
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            UserProfileRepository.profile.collect {
+                driverProfile -> _uiState.update {
+                    it.copy(
+                        accountStatus = driverProfile.accountStatus,
+                        rejectReason = driverProfile.rejectReason,
+                        isAccountStatusLoaded = driverProfile.isLoaded
+                    )
+                }
+            }
+        }
+    }
     fun onEmailChange(email: String) {
         _uiState.update {
             it.copy(
