@@ -1,3 +1,5 @@
+import { EmployeesPage } from "./EmployeesPage";
+import { TransportPage } from "./TransportPage";
 import { LocationPanel, eventLabel, hasCoordinates } from "./LocationPanel";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -13,7 +15,7 @@ import {
 } from "../api/client";
 import { AuditPage, BindingsPage, GlobalSearchPage, HealthPage, SettingsPage } from "./ManagementPages";
 
-type View = "dashboard" | "devices" | "bindings" | "users" | "vehicles" | "sessions" | "alerts" | "settings" | "health" | "audit" | "search";
+type View = "dashboard" | "devices" | "bindings" | "users" | "vehicles" | "sessions" | "alerts" | "settings" | "health" | "audit" | "search" | "transport";
 type DataState = {
   summary: DashboardSummary | null;
   trend: AlertTrendPoint[];
@@ -30,10 +32,11 @@ const EMPTY_DATA: DataState = {
 };
 
 const NAV = [
+  { id: "transport" as const, label: "Điều hành vận tải", icon: Car },
   { id: "dashboard" as const, label: "Tổng quan", icon: LayoutDashboard },
   { id: "devices" as const, label: "Thiết bị", icon: Camera },
   { id: "bindings" as const, label: "Gán thiết bị", icon: Link2 },
-  { id: "users" as const, label: "Tài xế", icon: Users },
+  { id: "users" as const, label: "Nhân viên", icon: Users },
   { id: "vehicles" as const, label: "Phương tiện", icon: Car },
   { id: "sessions" as const, label: "Phiên giám sát", icon: Video },
   { id: "alerts" as const, label: "Cảnh báo", icon: AlertTriangle },
@@ -155,19 +158,6 @@ function DeviceDialog({ close, saved }: { close: () => void; saved: () => Promis
   const [form, setForm] = useState({ deviceCode: "", deviceName: "", deviceType: "edge-camera" }); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   async function submit(e: FormEvent) { e.preventDefault(); setBusy(true); setError(""); try { await api.createDevice(form); await saved(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Không thể thêm thiết bị"); } finally { setBusy(false); } }
   return <Modal title="Thêm thiết bị" close={close}><form className="dialog-form" onSubmit={submit}><label>Mã thiết bị<input value={form.deviceCode} onChange={(e) => setForm({ ...form, deviceCode: e.target.value })} required /></label><label>Tên thiết bị<input value={form.deviceName} onChange={(e) => setForm({ ...form, deviceName: e.target.value })} required /></label><label>Loại thiết bị<input value={form.deviceType} onChange={(e) => setForm({ ...form, deviceType: e.target.value })} required /></label>{error && <div className="form-error">{error}</div>}<div className="dialog-actions"><button type="button" className="secondary-button" onClick={close}>Hủy</button><button className="primary-button" disabled={busy}>{busy ? "Đang lưu..." : "Thêm mới"}</button></div></form></Modal>;
-}
-
-function UsersPage({ items, reload }: { items: User[]; reload: () => Promise<void> }) {
-  const [search, setSearch] = useState(""); const [adding, setAdding] = useState(false); const [error, setError] = useState("");
-  const filtered = items.filter((u) => `${u.fullName} ${u.phone || ""}`.toLowerCase().includes(search.toLowerCase()));
-  async function toggle(user: User) { try { await api.updateUser(user.id, { is_active: !user.isActive }); await reload(); } catch (e) { setError(e instanceof Error ? e.message : "Không thể cập nhật tài xế"); } }
-  return <div className="page-stack"><Toolbar title="Tài xế" description="Quản lý người dùng được đồng bộ với ứng dụng Android." search={search} setSearch={setSearch} action={<button className="primary-button" onClick={() => setAdding(true)}><Plus />Thêm tài xế</button>} />{error && <div className="inline-error">{error}</div>}<div className="panel table-panel"><table><thead><tr><th>Tài xế</th><th>Điện thoại</th><th>Ngày tạo</th><th>Trạng thái</th><th /></tr></thead><tbody>{filtered.map((u) => <tr key={u.id}><td><strong>{u.fullName}</strong><small>{u.id.slice(0, 8)}</small></td><td>{u.phone || "—"}</td><td>{formatDate(u.createdAt)}</td><td><Badge tone={u.isActive ? "green" : "red"}>{u.isActive ? "Hoạt động" : "Tạm khóa"}</Badge></td><td><button className="text-button" onClick={() => toggle(u)}>{u.isActive ? "Khóa" : "Mở khóa"}</button></td></tr>)}</tbody></table>{!filtered.length && <Empty text="Không tìm thấy tài xế" />}</div>{adding && <UserDialog close={() => setAdding(false)} saved={async () => { setAdding(false); await reload(); }} />}</div>;
-}
-
-function UserDialog({ close, saved }: { close: () => void; saved: () => Promise<void> }) {
-  const [name, setName] = useState(""); const [phone, setPhone] = useState(""); const [error, setError] = useState("");
-  async function submit(e: FormEvent) { e.preventDefault(); try { await api.createUser({ full_name: name, phone: phone || undefined }); await saved(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Không thể thêm tài xế"); } }
-  return <Modal title="Thêm tài xế" close={close}><form className="dialog-form" onSubmit={submit}><label>Họ và tên<input value={name} onChange={(e) => setName(e.target.value)} required /></label><label>Số điện thoại<input value={phone} onChange={(e) => setPhone(e.target.value)} /></label>{error && <div className="form-error">{error}</div>}<div className="dialog-actions"><button type="button" className="secondary-button" onClick={close}>Hủy</button><button className="primary-button">Thêm mới</button></div></form></Modal>;
 }
 
 function VehiclesPage({ items, users, reload }: { items: Vehicle[]; users: User[]; reload: () => Promise<void> }) {
@@ -393,7 +383,8 @@ function AppShell({ logout }: { logout: () => void }) {
     if (view === "dashboard") return <Dashboard data={data} openSession={setRouteSession} openAlert={(recent) => setEvent(data.events.find(item => item.id === recent.id) || null)} />;
     if (view === "devices") return <DevicesPage items={data.devices} reload={load} />;
     if (view === "bindings") return <BindingsPage users={data.users} devices={data.devices} />;
-    if (view === "users") return <UsersPage items={data.users} reload={load} />;
+    if (view === "users") return <EmployeesPage items={data.users} reload={load} />;
+    if (view === "transport") return <TransportPage users={data.users} openGps={setRouteSession} />;
     if (view === "vehicles") return <VehiclesPage items={data.vehicles} users={data.users} reload={load} />;
     if (view === "sessions") return <SessionsPage openSession={setRouteSession} items={data.sessions} users={data.users} devices={data.devices} vehicles={data.vehicles} />;
     if (view === "settings") return <SettingsPage devices={data.devices} />;
