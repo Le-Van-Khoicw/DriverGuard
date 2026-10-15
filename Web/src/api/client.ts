@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { db, auth } from "./firebase";
+import { employeeStatus, employeeStatusUpdate, EmployeeStatus } from "./employees";
 
 export type User = {
   id: string;
@@ -23,6 +24,8 @@ export type User = {
   fullName: string;
   role: "admin" | "driver";
   isActive: boolean;
+  accountStatus?: EmployeeStatus;
+  rejectReason?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -177,14 +180,16 @@ export const api = {
           username: d.email || null,
           phone: d.phone || null,
           fullName: d.displayName || "Tài xế " + doc.id.slice(0, 5),
-          role: "driver",
-          isActive: true,
+          role: d.role === "admin" ? "admin" : "driver",
+          isActive: employeeStatus(d) === "active",
+          accountStatus: employeeStatus(d),
+          rejectReason: typeof d.rejectReason === "string" ? d.rejectReason : "",
           createdAt: toIsoString(d.createdAt),
           updatedAt: toIsoString(d.updatedAt)
         };
       });
-    } catch {
-      return [];
+    } catch (reason) {
+      throw new Error(reason instanceof Error ? reason.message : "Không thể tải danh sách nhân viên");
     }
   },
 
@@ -213,7 +218,8 @@ export const api = {
 
   async updateUser(id: string, data: Record<string, unknown>): Promise<User> {
     const ref = doc(db, "drivers", id);
-    await updateDoc(ref, { ...data, updatedAt: Date.now() });
+    const status = data.accountStatus as EmployeeStatus | undefined;
+    await updateDoc(ref, { ...data, ...(status ? employeeStatusUpdate(status, typeof data.rejectReason === "string" ? data.rejectReason : undefined) : {}), updatedAt: Date.now() });
     const snap = await getDoc(ref);
     const d = snap.data() || {};
     return {
@@ -222,7 +228,9 @@ export const api = {
       phone: d.phone || null,
       fullName: d.displayName || "Tài xế",
       role: "driver",
-      isActive: true,
+      isActive: employeeStatus(d) === "active",
+          accountStatus: employeeStatus(d),
+          rejectReason: typeof d.rejectReason === "string" ? d.rejectReason : "",
       createdAt: toIsoString(d.createdAt),
       updatedAt: toIsoString(d.updatedAt)
     };
@@ -427,7 +435,7 @@ export const api = {
           ear: d.ear ?? 0.15,
           confidence: 0.96,
           closedDurationMs: (d.closedDurationSec ?? 2.0) * 1000,
-          imageUrl: null,
+          imageUrl: typeof d.imageUrl === "string" ? d.imageUrl : null,
           occurredAt: toIsoString(d.timestamp),
           status: (d.status as any) || "NEW",
           handledBy: d.handledBy || null,
