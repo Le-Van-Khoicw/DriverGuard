@@ -6,8 +6,8 @@ import { hasCoordinates, LocationPanel } from "./LocationPanel";
 
 vi.mock("../api/client", () => ({ api: { locations: vi.fn(), latestLocations: vi.fn() } }));
 vi.mock("leaflet", () => {
-  const layer = () => ({ addTo: vi.fn().mockReturnThis(), remove: vi.fn(), bindPopup: vi.fn().mockReturnThis(), on: vi.fn().mockReturnThis() });
-  return { map: () => ({ setView: vi.fn().mockReturnThis(), remove: vi.fn(), fitBounds: vi.fn(), invalidateSize: vi.fn() }), tileLayer: layer, layerGroup: layer, circleMarker: layer, polyline: layer, latLngBounds: vi.fn() };
+  const layer = () => ({ addTo: vi.fn().mockReturnThis(), remove: vi.fn(), clearLayers: vi.fn(), openPopup: vi.fn(), bindPopup: vi.fn().mockReturnThis(), on: vi.fn().mockReturnThis() });
+  return { map: () => ({ setView: vi.fn().mockReturnThis(), remove: vi.fn(), fitBounds: vi.fn(), flyTo: vi.fn(), invalidateSize: vi.fn() }), tileLayer: layer, layerGroup: layer, circleMarker: layer, polyline: layer, latLngBounds: vi.fn() };
 });
 const point: LatestLocation = { deviceId: "device-1", sessionId: "session-1", latitude: 10.75, longitude: 106.7, speedKmh: 0, recordedAt: "2026-09-06T03:00:00Z" };
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });

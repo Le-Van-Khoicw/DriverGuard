@@ -1,145 +1,146 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
+const sdk = vi.hoisted(() => ({ getDocs: vi.fn(), getDoc: vi.fn(), setDoc: vi.fn(), updateDoc: vi.fn(), onSnapshot: vi.fn(), signIn: vi.fn(), signOut: vi.fn() }));
+vi.mock('./firebase', () => ({ db: {}, auth: {} }));
+vi.mock('firebase/auth', () => ({ signInWithEmailAndPassword: sdk.signIn, signOut: sdk.signOut }));
+vi.mock('firebase/firestore', () => ({ ...sdk,
+  collection: (_db: unknown, name: string) => name, doc: (_db: unknown, name: string, id: string) => `${name}/${id}`,
+  query: (ref: string) => ref, orderBy: vi.fn(), limit: vi.fn(), where: vi.fn(), deleteDoc: vi.fn(),
+  Timestamp: class { toDate() { return new Date('2026-10-16T00:00:00Z'); } },
+}));
 import { api } from './client';
-
-const fetchMock = vi.fn<typeof fetch>();
-function reply(body: unknown, status = 200) {
-  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body), { status }));
-}
+import { Timestamp } from 'firebase/firestore';
+type Data = Record<string, unknown>;
+let records: Record<string, Data[]>;
 beforeEach(() => {
-  fetchMock.mockReset();
-  vi.stubGlobal('fetch', fetchMock);
+  vi.resetAllMocks();
+  records = {
+    drivers: [{ id: 'driver-1', displayName: 'Nguyễn An', email: 'an@example.com', phone: '0901234567', accountStatus: 'active', vehicleName: 'Xe An', licensePlate: '51A', deviceName: 'Camera An', deviceCode: 'CAM', createdAt: 1000, updatedAt: 2000 }],
+    alerts: [{ id: 'alert-1', userId: 'driver-1', timestamp: Date.now(), ear: 0.18, closedDurationSec: 3, imageUrl: 'https://example.com/evidence.jpg', latitude: 0, longitude: 0 }],
+    trips: [{ id: 'trip-1', userId: 'driver-1', startTime: Date.now() }],
+  };
+  sdk.getDocs.mockImplementation(async (name: string) => ({ docs: (records[name] ?? []).map((data, index) => ({ id: String(data.id ?? `id-${index}`), data: () => data })) }));
+  sdk.getDoc.mockImplementation(async () => ({ data: () => records.drivers[0] }));
+  sdk.signOut.mockResolvedValue(undefined); sdk.updateDoc.mockResolvedValue(undefined); sdk.setDoc.mockResolvedValue(undefined);
 });
-
-describe('authentication and error handling', () => {
-  it('sends URL-encoded login and saves token', async () => {
-    reply({ access_token: 'jwt' });
-    await api.login('admin+test', 'a&b');
-    const [url, options] = fetchMock.mock.calls[0];
-    expect(String(url)).toMatch(/\/api\/v1\/auth\/login$/);
-    expect(options?.method).toBe('POST');
-    expect(String(options?.body)).toBe('username=admin%2Btest&password=a%26b');
-    expect(api.hasToken()).toBe(true);
-    api.logout();
-    expect(api.hasToken()).toBe(false);
-  });
-  it('does not save a token for wrong credentials', async () => {
-    reply({ detail: 'Sai tài khoản hoặc mật khẩu' }, 400);
-    await expect(api.login('admin', 'wrong')).rejects.toThrow('Sai tài khoản');
-    expect(api.hasToken()).toBe(false);
-  });
-  it.each([{}, { access_token: '' }, { access_token: 123 }])('rejects malformed token response %j', async (body) => {
-    reply(body);
-    await expect(api.login('admin', 'pass')).rejects.toThrow('token');
-    expect(api.hasToken()).toBe(false);
-  });
-  it('clears token and notifies UI on 401', async () => {
-    sessionStorage.setItem('driverguard_token', 'expired');
-    const listener = vi.fn();
-    window.addEventListener('driverguard:unauthorized', listener, { once: true });
-    reply({ detail: 'Expired' }, 401);
-    await expect(api.devices()).rejects.toThrow('Expired');
-    expect(listener).toHaveBeenCalledOnce();
-    expect(api.hasToken()).toBe(false);
-  });
-  it('preserves token on forbidden response', async () => {
-    sessionStorage.setItem('driverguard_token', 'jwt');
-    reply({ detail: 'Forbidden' }, 403);
-    await expect(api.users()).rejects.toThrow('Forbidden');
-    expect(api.hasToken()).toBe(true);
-  });
-  it('formats FastAPI validation details', async () => {
-    reply({ detail: [{ msg: 'Field required' }, {}] }, 422);
-    await expect(api.users()).rejects.toThrow('Field required; Dữ liệu không hợp lệ');
-  });
-  it('handles non-JSON server errors', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('Server error', { status: 500 }));
-    await expect(api.devices()).rejects.toThrow('HTTP 500');
-  });
-  it('handles unavailable network', async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    await expect(api.dashboard()).rejects.toThrow('Không thể kết nối');
-  });
-  it('can issue requests without a stored token', async () => {
-    reply([]);
-    await api.users();
-    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).has('Authorization')).toBe(false);
-  });
+it.each(['admin', 'admin@driverguard.vn', 'admin@gmail.com'])('keeps explicit demo login %s', async username => {
+  await api.login(username, 'admin123'); expect(api.hasToken()).toBe(true); expect(sdk.signIn).not.toHaveBeenCalled();
 });
-
-describe('API request contract', () => {
-  const user = { full_name: 'An', phone: '0901234567' };
-  const device = { deviceCode: 'CAM-2', deviceName: 'New', deviceType: 'edge-camera' };
-  const vehicle = { userId: 'u1', displayName: 'Car', licensePlate: null, vehicleType: 'car' as const };
-  it.each([
-    ['summary', () => api.dashboard(), '/dashboard/summary', 'GET', undefined],
-    ['trend', () => api.alertTrend(), '/dashboard/alert-trend?days=7', 'GET', undefined],
-    ['custom trend', () => api.alertTrend(30), '/dashboard/alert-trend?days=30', 'GET', undefined],
-    ['users', () => api.users(), '/users?role=driver', 'GET', undefined],
-    ['create user', () => api.createUser(user), '/users', 'POST', { ...user, role: 'driver', is_active: true }],
-    ['lock user', () => api.updateUser('u1', { is_active: false }), '/users/u1', 'PATCH', { is_active: false }],
-    ['devices', () => api.devices(), '/devices', 'GET', undefined],
-    ['create device', () => api.createDevice(device), '/devices', 'POST', device],
-    ['lock device', () => api.updateDevice('d1', { status: 'locked' }), '/devices/d1', 'PATCH', { status: 'locked' }],
-    ['vehicles', () => api.vehicles(), '/vehicles', 'GET', undefined],
-    ['create vehicle', () => api.createVehicle(vehicle), '/vehicles', 'POST', vehicle],
-    ['edit vehicle', () => api.updateVehicle('v1', { displayName: 'New' }), '/vehicles/v1', 'PATCH', { displayName: 'New' }],
-    ['sessions', () => api.sessions(), '/monitoring-sessions', 'GET', undefined],
-    ['session filters', () => api.sessions({ user_id: 'a b', status: '' }), '/monitoring-sessions?user_id=a+b', 'GET', undefined],
-    ['events', () => api.events(), '/drowsiness-events?pageSize=100', 'GET', undefined],
-    ['event filters', () => api.events({ pageSize: 20, page: 2, status: 'NEW', userId: undefined }), '/drowsiness-events?pageSize=20&page=2&status=NEW', 'GET', undefined],
-    ['resolve event', () => api.updateEventStatus('e1', 'RESOLVED', 'Done'), '/drowsiness-events/e1/status', 'PATCH', { status: 'RESOLVED', note: 'Done' }],
-    ['empty note', () => api.updateEventStatus('e1', 'ACKNOWLEDGED'), '/drowsiness-events/e1/status', 'PATCH', { status: 'ACKNOWLEDGED', note: null }],
-  ] as const)('%s', async (_name, action, path, method, body) => {
-    sessionStorage.setItem('driverguard_token', 'jwt');
-    reply({ ok: true });
-    await action();
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toBe(`http://localhost:8000/api/v1${path}`);
-    expect(init?.method || 'GET').toBe(method);
-    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer jwt');
-    if (body) {
-      expect(JSON.parse(String(init?.body))).toEqual(body);
-      expect(new Headers(init?.headers).get('Content-Type')).toBe('application/json');
-    }
-  });
-  it('handles DELETE 204 without attempting JSON parsing', async () => {
-    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
-    await expect(api.deleteVehicle('v1')).resolves.toBeUndefined();
-    expect(fetchMock.mock.calls[0][1]?.method).toBe('DELETE');
-  });
-  it('downloads CSV through authenticated request', async () => {
-    sessionStorage.setItem('driverguard_token', 'jwt');
-    fetchMock.mockResolvedValueOnce(new Response('id,status\ne1,NEW'));
-    const blob = await api.exportReport();
-    expect(blob).toBeDefined();
-    expect(blob.size).toBeGreaterThan(0);
-    expect(fetchMock.mock.calls[0][0]).toBe(api.exportReportUrl());
-    const init = fetchMock.mock.calls[0][1];
-    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer jwt');
-  });
-  it.each([
-    ['recent alerts', () => api.recentAlerts(8), '/dashboard/recent-alerts?limit=8', 'GET', undefined],
-    ['bindings', () => api.bindings({ status: 'active' }), '/device-bindings?status=active', 'GET', undefined],
-    ['create binding', () => api.createBinding({ userId: 'u1', deviceId: 'd1' }), '/device-bindings', 'POST', { userId: 'u1', deviceId: 'd1' }],
-    ['unbind', () => api.unbindDevice('b1'), '/device-bindings/b1/unbind', 'PATCH', undefined],
-    ['settings', () => api.detectionSettings(), '/detection-settings', 'GET', undefined],
-    ['save settings', () => api.saveDetectionSettings({ deviceId: null, earThreshold: .25, confidenceThreshold: .8, closedDurationThresholdMs: 2000 }), '/detection-settings', 'POST', { deviceId: null, earThreshold: .25, confidenceThreshold: .8, closedDurationThresholdMs: 2000 }],
-    ['health filter', () => api.deviceHealth('d1'), '/device-health?device_id=d1', 'GET', undefined],
-    ['audit filters', () => api.auditLogs({ target_table: 'devices', page: 2 }), '/audit-logs?page=2&page_size=100&target_table=devices', 'GET', undefined],
-    ['global search', () => api.search('CAM 01', 10), '/search?q=CAM+01&limit=10', 'GET', undefined],
-  ] as const)('%s contract', async (_name, action, path, method, body) => {
-    sessionStorage.setItem('driverguard_token', 'jwt'); reply([]); await action();
-    const [url, init] = fetchMock.mock.calls[0]; expect(String(url)).toBe(`http://localhost:8000/api/v1${path}`);
-    expect(init?.method || 'GET').toBe(method);
-    if (body) expect(JSON.parse(String(init?.body))).toEqual(body);
-  });
+it.each([['employee', 'employee@driverguard.vn'], ['an@example.com', 'an@example.com']])('authenticates %s with Firebase', async (username, email) => {
+  sdk.signIn.mockResolvedValue({ user: { getIdToken: async () => 'firebase-token' } });
+  await api.login(username, 'password'); expect(sdk.signIn).toHaveBeenCalledWith(expect.anything(), email, 'password');
+  expect(sessionStorage.getItem('driverguard_token')).toBe('firebase-token');
+  api.logout(); expect(api.hasToken()).toBe(false); expect(sdk.signOut).toHaveBeenCalledOnce();
 });
-
-it('reads GPS history using session_id and authenticates both location endpoints', async () => {
-  sessionStorage.setItem('driverguard_token', 'jwt');
-  reply([]); await api.locations('session & 1');
-  reply([]); await api.latestLocations();
-  expect(String(fetchMock.mock.calls[0][0])).toContain('/locations?session_id=session+%26+1');
-  expect(String(fetchMock.mock.calls[1][0])).toMatch(/\/locations\/latest$/);
-  for (const [, options] of fetchMock.mock.calls) expect(new Headers(options?.headers).get('Authorization')).toBe('Bearer jwt');
+it('handles rejected Firebase auth according to existing demo behavior', async () => {
+  sdk.signIn.mockRejectedValue(new Error('offline'));
+  await expect(api.login('admin', 'wrong')).rejects.toThrow('6 ký tự'); expect(api.hasToken()).toBe(false);
+  await api.login('employee', 'password'); expect(sessionStorage.getItem('driverguard_token')).toBe('demo_employee');
+  sdk.signOut.mockRejectedValue(new Error('offline')); api.logout(); await Promise.resolve(); expect(api.hasToken()).toBe(false);
+});
+it('reads rejected employees and preserves reason', async () => {
+  records.drivers[0] = { ...records.drivers[0], accountStatus: 'rejected', rejectReason: 'Thiếu hồ sơ' };
+  expect((await api.users())[0]).toMatchObject({ id: 'driver-1', accountStatus: 'rejected', rejectReason: 'Thiếu hồ sơ', isActive: false });
+  expect(sdk.getDocs).toHaveBeenCalledWith('drivers');
+});
+it('normalizes admins, legacy accounts and missing profile fields', async () => {
+  records.drivers = [{ role: 'admin' }, { is_active: false }, { accountStatus: 'pending' }];
+  const users = await api.users(); expect(users[0]).toMatchObject({ role: 'admin', phone: null, username: null, isActive: true });
+  expect(users[1].accountStatus).toBe('locked'); expect(users[2].isActive).toBe(false);
+});
+it('persists approval transitions and clears old rejection reasons', async () => {
+  await api.updateUser('driver-1', { accountStatus: 'rejected', rejectReason: ' Thiếu hồ sơ ' });
+  expect(sdk.updateDoc).toHaveBeenLastCalledWith('drivers/driver-1', expect.objectContaining({ rejectReason: 'Thiếu hồ sơ', isActive: false, is_active: false }));
+  await api.updateUser('driver-1', { accountStatus: 'active' });
+  expect(sdk.updateDoc).toHaveBeenLastCalledWith('drivers/driver-1', expect.objectContaining({ rejectReason: '', isActive: true }));
+  records.drivers = []; expect(await api.updateUser('driver-1', { phone: '123' })).toMatchObject({ phone: null });
+});
+it('rejects invalid rejection before writing and propagates permissions', async () => {
+  await expect(api.updateUser('driver-1', { accountStatus: 'rejected' })).rejects.toThrow('lý do'); expect(sdk.updateDoc).not.toHaveBeenCalled();
+  sdk.updateDoc.mockRejectedValue(new Error('permission-denied'));
+  await expect(api.updateUser('driver-1', { accountStatus: 'active' })).rejects.toThrow('permission-denied');
+  sdk.getDocs.mockRejectedValue(new Error('permission-denied')); await expect(api.users()).rejects.toThrow('permission-denied');
+  sdk.getDocs.mockRejectedValue('offline'); await expect(api.users()).rejects.toThrow('Không thể tải');
+});
+it('retains legacy profile-only creation, not an Auth account', async () => {
+  const user = await api.createUser({ full_name: 'An', phone: '123' });
+  expect(sdk.setDoc).toHaveBeenCalledWith(`drivers/${user.id}`, expect.objectContaining({ displayName: 'An', phone: '123' }));
+  await api.createUser({ full_name: 'Bình' });
+});
+it('subscribes and disposes all three listeners', () => {
+  const stops = [vi.fn(), vi.fn(), vi.fn()]; stops.forEach(stop => sdk.onSnapshot.mockReturnValueOnce(stop));
+  const updated = vi.fn(); const unsubscribe = api.subscribeRealtime(updated);
+  expect(sdk.onSnapshot.mock.calls.map(call => call[0])).toEqual(['drivers', 'alerts', 'trips']);
+  sdk.onSnapshot.mock.calls[0][1](); expect(updated).toHaveBeenCalledOnce();
+  sdk.onSnapshot.mock.calls.forEach(call => call[2](new Error('offline')));
+  unsubscribe(); stops.forEach(stop => expect(stop).toHaveBeenCalledOnce());
+});
+it('maps mobile devices, vehicles, bindings and sessions', async () => {
+  expect((await api.devices())[0]).toMatchObject({ id: 'dev_driver-1', deviceName: 'Camera An' });
+  expect((await api.vehicles())[0]).toMatchObject({ id: 'veh_driver-1', licensePlate: '51A' });
+  expect((await api.bindings())[0].deviceId).toBe('dev_driver-1');
+  expect((await api.sessions())[0]).toMatchObject({ status: 'active', endedAt: null });
+  records.trips.push({ startTime: '2026-10-16', endTime: 2000 }); expect((await api.sessions())[1]).toMatchObject({ userId: '', status: 'ended' });
+});
+it('handles sparse devices and filters drivers without vehicles', async () => {
+  records.drivers = [{}, { licensePlate: '51B' }, { vehicleName: 'Xe' }];
+  expect((await api.devices())[0].deviceName).toBe('Điện thoại tài xế'); expect(await api.vehicles()).toHaveLength(2);
+});
+it('keeps evidence images, zero GPS and duration units', async () => {
+  const result = await api.events(); expect(result.items[0]).toMatchObject({ imageUrl: 'https://example.com/evidence.jpg', latitude: 0, longitude: 0, closedDurationMs: 3000 });
+  expect(result.total).toBe(1); expect((await api.latestLocations())[0]).toMatchObject({ latitude: 0, speedKmh: null });
+  expect(await api.locations('driver-1')).toHaveLength(1); expect(await api.locations('other')).toEqual([]);
+});
+it('maps sparse events and deduplicates locations by employee', async () => {
+  records.alerts = [{}, { userId: 'driver-1', latitude: 10, longitude: 106, speedKmh: 40 }, { userId: 'driver-1', latitude: 11, longitude: 107 }];
+  expect((await api.events()).items[0]).toMatchObject({ imageUrl: null, note: null, latitude: null, status: 'NEW' });
+  expect(await api.latestLocations()).toHaveLength(1); expect(await api.locations()).toHaveLength(2);
+  expect((await api.recentAlerts())[0]).toMatchObject({ sessionId: 'session', status: 'NEW' });
+});
+it('normalizes Firestore timestamps and existing ISO strings', async () => {
+  records.drivers = [{ createdAt: new Timestamp(0, 0), updatedAt: '2026-10-16' }, { createdAt: {}, updatedAt: null }];
+  const users = await api.users(); expect(users[0].createdAt).toBe('2026-10-16T00:00:00.000Z');
+  expect(users[0].updatedAt).toBe('2026-10-16'); expect(Date.parse(users[1].createdAt)).not.toBeNaN();
+});
+it('reads and writes handling status and note', async () => {
+  records.alerts = [{ status: 'RESOLVED', note: 'Đã xử lý', handledBy: 'admin', timestamp: '2026-10-16' }];
+  expect((await api.events()).items[0]).toMatchObject({ status: 'RESOLVED', handledBy: 'admin', note: 'Đã xử lý' });
+  expect((await api.recentAlerts(1))[0].status).toBe('RESOLVED');
+  await api.updateEventStatus('alert-1', 'RESOLVED', 'Đã gọi');
+  expect(sdk.updateDoc).toHaveBeenLastCalledWith('alerts/alert-1', { status: 'RESOLVED', note: 'Đã gọi' });
+  await api.updateEventStatus('alert-1', 'NEW'); expect(sdk.updateDoc).toHaveBeenLastCalledWith('alerts/alert-1', { status: 'NEW', note: null });
+});
+it.each(['devices', 'vehicles', 'bindings', 'sessions', 'locations', 'latestLocations', 'recentAlerts', 'alertTrend'] as const)('retains empty fallback on %s failure', async method => {
+  sdk.getDocs.mockRejectedValue(new Error('offline')); expect(await api[method]()).toEqual([]);
+});
+it('returns empty event page on read error', async () => {
+  sdk.getDocs.mockRejectedValue(new Error('offline')); expect((await api.events()).items).toEqual([]);
+});
+it('aggregates today dashboard and seven day trends', async () => {
+  expect(await api.dashboard()).toMatchObject({ totalDevices: 1, alertsToday: 1, sessionsToday: 1, unhandledAlerts: 1 });
+  const trend = await api.alertTrend(7); expect(trend).toHaveLength(7); expect(trend.reduce((sum, row) => sum + row.count, 0)).toBe(1);
+  records.alerts = [{ timestamp: 1000, status: 'RESOLVED' }, { timestamp: 'now', status: 'NEW' }]; records.trips = [{ startTime: 1000 }, {}];
+  expect((await api.dashboard()).unhandledAlerts).toBe(1); expect((await api.alertTrend()).every(row => row.count === 0)).toBe(true);
+  records.drivers = []; records.alerts = []; records.trips = []; expect((await api.dashboard()).totalDevices).toBe(1);
+  sdk.getDocs.mockRejectedValue(new Error('offline')); expect((await api.dashboard()).alertsToday).toBe(0);
+});
+it('searches employees by name and phone', async () => {
+  expect(await api.search('nguyễn')).toHaveLength(1); expect(await api.search('090')).toHaveLength(1); expect(await api.search('absent')).toEqual([]);
+  records.drivers = [{ displayName: 'Bình' }]; expect(await api.search('bình')).toHaveLength(1);
+});
+it('documents local-only legacy adapters without claiming Firebase persistence', async () => {
+  expect(await api.createDevice({ deviceCode: 'CAM', deviceName: 'Camera', deviceType: 'Android' })).toMatchObject({ deviceCode: 'CAM' });
+  expect((await api.updateDevice('dev', { status: 'locked', deviceName: 'New' })).status).toBe('locked'); await api.updateDevice('dev', {});
+  expect((await api.createBinding({ userId: 'u', deviceId: 'd' })).status).toBe('active'); expect((await api.unbindDevice('b')).status).toBe('ended');
+  await api.updateVehicle('v', {}); await api.updateVehicle('v', { userId: 'u', displayName: 'Xe', licensePlate: '51A', vehicleType: 'truck' }); await api.deleteVehicle('v');
+  expect(sdk.updateDoc).not.toHaveBeenCalled();
+});
+it('writes vehicle details to the correct driver document', async () => {
+  await api.createVehicle({ userId: 'driver-1', displayName: 'Xe', licensePlate: '51B', vehicleType: 'truck' });
+  expect(sdk.updateDoc).toHaveBeenCalledWith('drivers/driver-1', expect.objectContaining({ vehicleName: 'Xe', licensePlate: '51B' }));
+  await api.createVehicle({ userId: '', displayName: 'Xe', licensePlate: null, vehicleType: null });
+});
+it('retains local settings, health and report placeholders', async () => {
+  const [settings] = await api.detectionSettings(); expect(settings.earThreshold).toBe(0.22); expect(await api.saveDetectionSettings(settings)).toMatchObject({ earThreshold: 0.22 });
+  expect((await api.deviceHealth())[0].status).toBe('connected'); expect(await api.auditLogs()).toEqual([]);
+  expect(api.exportReportUrl()).toBe('#'); expect((await api.exportReport()).type).toBe('text/plain');
 });

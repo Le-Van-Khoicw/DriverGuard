@@ -8,7 +8,7 @@ import { api } from '../api/client';
 import { fixtures } from '../test/fixtures';
 
 vi.mock('../api/client', () => ({ api: {
-  latestLocations: vi.fn(), locations: vi.fn(), hasToken: vi.fn(), login: vi.fn(), logout: vi.fn(), dashboard: vi.fn(), alertTrend: vi.fn(), recentAlerts: vi.fn(),
+  subscribeRealtime: vi.fn(), latestLocations: vi.fn(), locations: vi.fn(), hasToken: vi.fn(), login: vi.fn(), logout: vi.fn(), dashboard: vi.fn(), alertTrend: vi.fn(), recentAlerts: vi.fn(),
   users: vi.fn(), devices: vi.fn(), vehicles: vi.fn(), sessions: vi.fn(), events: vi.fn(),
   createUser: vi.fn(), updateUser: vi.fn(), createDevice: vi.fn(), updateDevice: vi.fn(),
   createVehicle: vi.fn(), deleteVehicle: vi.fn(), updateEventStatus: vi.fn(), exportReport: vi.fn(),
@@ -24,6 +24,7 @@ vi.mock('recharts', () => ({
 const mock = vi.mocked(api);
 beforeEach(() => {
   vi.resetAllMocks();
+  mock.subscribeRealtime.mockReturnValue(vi.fn());
   const data = fixtures();
   mock.latestLocations.mockResolvedValue([]); mock.locations.mockResolvedValue([]); mock.hasToken.mockReturnValue(true);
   mock.dashboard.mockResolvedValue(data.summary);
@@ -83,8 +84,8 @@ it('renders summary, chart and recent alert details', async () => {
   const user = await openPage();
   expect(screen.getByText('Tổng thiết bị')).toBeVisible(); expect(screen.getByTestId('chart')).toBeVisible();
   await user.click(screen.getByRole('button', { name: /Buồn ngủ/ }));
-  expect(screen.getByRole('dialog', { name: 'Chi tiết cảnh báo' })).toBeVisible();
-  expect(screen.getByText('Không có ảnh minh chứng')).toBeVisible();
+  expect(screen.getByRole('dialog', { name: /^Chi tiết cảnh báo/ })).toBeVisible();
+  expect(screen.getByText('Chưa có ảnh chụp khuôn mặt thời điểm này')).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Đóng hộp thoại' }));
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
@@ -99,7 +100,7 @@ it('shows empty dashboard and empty resource pages', async () => {
   mock.vehicles.mockResolvedValue([]); mock.events.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 100 });
   mock.recentAlerts.mockResolvedValue([]);
   const user = await openPage(); expect(screen.getByText('Chưa có cảnh báo')).toBeVisible();
-  for (const [name, text] of [['Thiết bị', 'Không tìm thấy thiết bị'], ['Tài xế', 'Không tìm thấy tài xế'], ['Phương tiện', 'Không tìm thấy phương tiện'], ['Phiên giám sát', 'Chưa có phiên giám sát'], ['Cảnh báo', 'Không tìm thấy cảnh báo']]) {
+  for (const [name, text] of [['Thiết bị', 'Không tìm thấy thiết bị'], ['Nhân viên', 'Chưa có nhân viên đăng ký'], ['Phương tiện', 'Không tìm thấy phương tiện'], ['Phiên giám sát', 'Chưa có phiên giám sát'], ['Cảnh báo', 'Không tìm thấy cảnh báo nào phù hợp']]) {
     await user.click(within(screen.getByRole('navigation')).getByRole('button', { name: new RegExp(`^${name}`) }));
     expect(screen.getByText(text)).toBeVisible();
     if (name === 'Phương tiện') expect(screen.getByRole('button', { name: 'Thêm phương tiện' })).toBeDisabled();
@@ -137,22 +138,18 @@ it('reports device update failure', async () => {
   await user.click(screen.getByRole('button', { name: 'Khóa' }));
   expect(await screen.findByText('Update failed')).toBeVisible();
 });
-it('creates, searches and locks a driver', async () => {
-  const user = await openPage('Tài xế'); await user.type(screen.getByPlaceholderText('Tìm kiếm...'), '0901234567');
+it('searches and locks an employee', async () => {
+  const user = await openPage('Nhân viên');
+  await user.type(screen.getByLabelText('Tìm nhân viên'), '0901234567');
   expect(screen.getByText('Nguyễn An')).toBeVisible();
   await user.click(screen.getByRole('button', { name: 'Khóa' }));
-  expect(mock.updateUser).toHaveBeenCalledWith('user-1', { is_active: false });
-  await screen.findByRole('button', { name: 'Thêm tài xế' }); await user.click(screen.getByRole('button', { name: 'Thêm tài xế' }));
-  await user.type(screen.getByLabelText('Họ và tên'), 'Bình'); await user.type(screen.getByLabelText('Số điện thoại'), '0909999999');
-  await user.click(screen.getByRole('button', { name: 'Thêm mới' }));
-  expect(mock.createUser).toHaveBeenCalledWith({ full_name: 'Bình', phone: '0909999999' });
+  expect(mock.updateUser).toHaveBeenCalledWith('user-1', { accountStatus: 'locked' });
 });
-it('handles driver creation and update errors', async () => {
-  mock.updateUser.mockRejectedValue(new Error('Cannot lock')); mock.createUser.mockRejectedValue(new Error('Duplicate phone'));
-  const user = await openPage('Tài xế'); await user.click(screen.getByRole('button', { name: 'Khóa' }));
-  expect(await screen.findByText('Cannot lock')).toBeVisible();
-  await user.click(screen.getByRole('button', { name: 'Thêm tài xế' })); await user.type(screen.getByLabelText('Họ và tên'), 'Bình');
-  await user.click(screen.getByRole('button', { name: 'Thêm mới' })); expect(await screen.findByText('Duplicate phone')).toBeVisible();
+it('reports employee update failure', async () => {
+  mock.updateUser.mockRejectedValue(new Error('Cannot lock'));
+  const user = await openPage('Nhân viên');
+  await user.click(screen.getByRole('button', { name: 'Khóa' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Cannot lock');
 });
 it('creates a vehicle linked to a driver', async () => {
   const user = await openPage('Phương tiện'); await user.click(screen.getByRole('button', { name: 'Thêm phương tiện' }));
@@ -181,16 +178,16 @@ it('shows session linked names and supports search', async () => {
 });
 it('filters alerts and saves handling status with note', async () => {
   const user = await openPage('Cảnh báo'); await user.selectOptions(screen.getByRole('combobox', { name: 'Lọc trạng thái' }), 'RESOLVED');
-  expect(screen.getByText('Không tìm thấy cảnh báo')).toBeVisible(); await user.selectOptions(screen.getByRole('combobox', { name: 'Lọc trạng thái' }), 'NEW');
+  expect(screen.getByText('Không tìm thấy cảnh báo nào phù hợp')).toBeVisible(); await user.selectOptions(screen.getByRole('combobox', { name: 'Lọc trạng thái' }), 'NEW');
   await user.click(screen.getByRole('cell', { name: 'Buồn ngủ' })); await user.selectOptions(screen.getByLabelText('Trạng thái'), 'ACKNOWLEDGED');
-  await user.type(screen.getByLabelText('Ghi chú'), 'Đã liên hệ'); await user.click(screen.getByRole('button', { name: 'Lưu xử lý' }));
+  await user.type(screen.getByLabelText('Ghi chú của quản trị viên'), 'Đã liên hệ'); await user.click(screen.getByRole('button', { name: 'Lưu trạng thái xử lý' }));
   expect(mock.updateEventStatus).toHaveBeenCalledWith('event-1', 'ACKNOWLEDGED', 'Đã liên hệ');
 });
 it('shows evidence image and handling failure', async () => {
   mock.events.mockResolvedValue({ items: [{ ...fixtures().events[0], imageUrl: '/evidence.jpg' }], total: 1, page: 1, pageSize: 100 });
   mock.updateEventStatus.mockRejectedValue(new Error('Cannot resolve')); const user = await openPage('Cảnh báo');
   await user.click(screen.getByRole('cell', { name: 'Buồn ngủ' })); expect(screen.getByAltText('Ảnh minh chứng cảnh báo')).toHaveAttribute('src', '/evidence.jpg');
-  await user.click(screen.getByRole('button', { name: 'Lưu xử lý' })); expect(await screen.findByText('Cannot resolve')).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Lưu trạng thái xử lý' })); expect(await screen.findByText('Cannot resolve')).toBeVisible();
 });
 it('downloads CSV and revokes the object URL', async () => {
   const blob = new Blob(['id,status']); mock.exportReport.mockResolvedValue(blob);
