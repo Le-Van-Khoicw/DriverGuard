@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null; }
+    function staff() {
+      return signed() && exists(/databases/$(database)/documents/staff/$(request.auth.uid))
+        && get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.active == true
+        && get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.role in ['admin', 'dispatcher'];
+    }
+    function owner(uid) { return signed() && request.auth.uid == uid; }
+    function admin() { return staff() && get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.role == 'admin'; }
+    function validReport(d) {
+      return owner(d.userId) && (d.get('dispatchTripId', null) == null ||
+        exists(/databases/$(database)/documents/tripAssignments/$(d.dispatchTripId + '_' + request.auth.uid + '_' + string(d.assignmentVersion))));
+    }
+    match /staff/{uid} { allow read: if owner(uid) || admin(); allow write: if false; }
+    match /drivers/{uid} {
+      allow read: if owner(uid) || staff();
+      allow create: if owner(uid) && request.resource.data.accountStatus == 'pending'
+        && request.resource.data.keys().hasOnly(['uid', 'displayName', 'email', 'phone', 'avatarUri', 'vehicleName', 'licensePlate', 'vehicleType', 'deviceName', 'deviceCode', 'accountStatus', 'createdAt', 'updatedAt']);
+      allow update: if owner(uid) && request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['uid', 'displayName', 'email', 'phone', 'avatarUri', 'vehicleName', 'licensePlate', 'vehicleType', 'deviceName', 'deviceCode', 'updatedAt']);
+    }
+    match /driverDossiers/{uid} { allow read: if owner(uid) || admin(); allow write: if false; }
+    match /driverDossiers/{uid}/revisions/{revision} { allow read: if owner(uid) || admin(); allow write: if false; }
+    match /fleetVehicles/{id} { allow read: if staff(); allow write: if false; }
+    match /transportOrders/{id} { allow read: if staff(); allow write: if false; }
+    match /dispatchTrips/{id} { allow read: if staff() || owner(resource.data.driverId); allow write: if false; }
+    match /leaveRequests/{id} { allow read: if staff() || owner(resource.data.driverId); allow write: if false; }
+    match /tripAssignments/{id} { allow read: if staff() || owner(resource.data.driverId); allow write: if false; }
+    match /dispatchAudit/{id} { allow read: if staff(); allow write: if false; }
+    match /dispatchReceipts/{id} { allow read: if owner(resource.data.uid); allow write: if false; }
+    match /resourceCalendars/{id} { allow read, write: if false; }
+    match /trips/{id} {
+      allow read: if staff() || owner(resource.data.userId);
+      allow create: if validReport(request.resource.data) && request.resource.data.id == id;
+      allow update: if owner(resource.data.userId) && request.resource.data == resource.data;
+    }
+    match /alerts/{id} {
+      allow read: if staff() || owner(resource.data.userId);
+      allow create: if validReport(request.resource.data) && request.resource.data.id == id;
+      allow update: if (owner(resource.data.userId) && request.resource.data == resource.data)
+        || (staff() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'note', 'handledBy', 'handledAt']));
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

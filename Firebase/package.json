@@ -1,0 +1,11 @@
+{
+  "name": "driverguard-local",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/start-local.mjs",
+    "seed:local": "node scripts/seed-local.mjs",
+    "emulators": "firebase emulators:start --project demo-driverguard --only auth,firestore,functions,storage --export-on-exit .emulator-data"
+  },
+  "devDependencies": { "firebase-tools": "15.34.0" }
+}

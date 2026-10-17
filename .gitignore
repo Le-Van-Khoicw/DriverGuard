@@ -1,5 +1,6 @@
 # Android / Gradle
 .gradle/
+.kotlin/
 **/build/
 local.properties
 .idea/
@@ -9,6 +10,13 @@ local.properties
 *.jks
 *.keystore
 .env
+.env.local
+.env.*.local
+**/.firebase/
+**/firebase-debug.log*
+**/firestore-debug.log*
+Firebase/.emulator-data/
+Firebase/.local-runtime/
 
 # Python
 __pycache__/
@@ -34,3 +42,7 @@ uploads/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# AI: videos, labels and generated reports stay local (contain face data).
+AI/data/
+AI/outputs/

@@ -1,0 +1,21 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signed() { return request.auth != null; }
+    function admin() {
+      return signed() && firestore.exists(/databases/(default)/documents/staff/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/staff/$(request.auth.uid)).data.active == true
+        && firestore.get(/databases/(default)/documents/staff/$(request.auth.uid)).data.role == 'admin';
+    }
+    match /driver-documents/{uid}/{kind}/{file} {
+      allow read: if signed() && (request.auth.uid == uid || admin());
+      // Immutable objects: replacing a reviewed image requires a new upload + new review.
+      allow create: if signed() && request.auth.uid == uid
+        && kind in ['identity_front', 'identity_back', 'license_front', 'license_back', 'health']
+        && request.resource.size > 0 && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'application/pdf'];
+      allow update, delete: if false;
+    }
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}

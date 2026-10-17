@@ -10,10 +10,11 @@
 @import '@fontsource/roboto/vietnamese-900.css';
 
 /* Shared with Mobile core/theme/Color.kt, Type.kt and AppTokens.kt. */
-:root {
+:root, :root[data-theme="light"] {
   font-family: Roboto, Arial, sans-serif;
   font-size: 15px; line-height: 1.4667; font-synthesis: none;
-  color: var(--text); background: var(--bg); color-scheme: light;
+  /* Keep Chromium auto-darkening from recoloring the app's explicit light palette. */
+  color: var(--text); background: var(--bg); color-scheme: only light;
   --bg: #f1f5f9; --surface: #ffffff; --surface-2: #f8fafc; --surface-3: #e8ecf0;
   --input: #f8fafc; --text: #1e293b; --muted: #64748b; --subtle: #94a3b8;
   --line: #e2e8f0; --divider: #e8ecf0; --appbar: #1565c0; --appbar-text: #ffffff;
@@ -24,10 +25,14 @@
   --shadow: 0 2px 8px rgba(30,41,59,.04);
 }
 :root[data-theme="dark"] {
-  color-scheme: dark;
+  color-scheme: only dark;
   --bg: #0d1117; --surface: #161b22; --surface-2: #1c2128; --surface-3: #21262d;
   --input: #0d1117; --text: #e6edf3; --muted: #7d8590; --subtle: #545d68;
   --line: #30363d; --divider: #21262d; --appbar: #161b22; --appbar-text: #e6edf3;
+  --primary-bg: #172f46; --primary-text: #93c5fd;
+  --safe-bg: #123326; --safe-text: #86efac;
+  --danger-bg: #3d2027; --danger-text: #fda4af;
+  --warning-bg: #3b301b; --warning-text: #fcd34d;
   --shadow: none;
 }
 * { box-sizing: border-box; }

@@ -11,7 +11,7 @@ export const eventLabel = (type: string) => type === "ACCIDENT" ? "Tai nạn" : 
 const date = (value: string) => new Date(value).toLocaleString("vi-VN");
 type MapPoint = { id: string; latitude: number; longitude: number; label: string; speed?: number | null; alert?: boolean };
 
-function LocationMap({
+export function LocationMap({
   points,
   route,
   centerKey = 0,
@@ -94,13 +94,17 @@ function LocationMap({
       popupDiv.style.minWidth = "180px";
       popupDiv.style.fontSize = "13px";
       popupDiv.style.lineHeight = "1.5";
-      popupDiv.innerHTML = `
-        <div style="font-weight: 700; color: ${p.alert ? '#dc2626' : '#0369a1'}; margin-bottom: 4px;">
-          ${p.alert ? '⚠️ CẢNH BÁO NGUY HIỂM' : '📍 Vị trí xe'}
-        </div>
-        <div style="color: #334155; margin-bottom: 2px;">${p.label}</div>
-        <div style="color: #64748b; font-size: 11px;">Tọa độ: ${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}</div>
-      `;
+      const heading = document.createElement('div');
+      heading.style.cssText = `font-weight:700;color:${p.alert ? '#dc2626' : '#0369a1'};margin-bottom:4px`;
+      heading.textContent = p.alert ? '⚠️ Cảnh báo đã ghi nhận' : '📍 Vị trí xe';
+      const label = document.createElement('div');
+      label.style.cssText = 'color:#334155;margin-bottom:2px';
+      // Names and labels come from user data; render text instead of interpreting HTML.
+      label.textContent = p.label;
+      const coordinates = document.createElement('div');
+      coordinates.style.cssText = 'color:#64748b;font-size:11px';
+      coordinates.textContent = `Tọa độ: ${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}`;
+      popupDiv.append(heading, label, coordinates);
 
       const marker = L.circleMarker([p.latitude, p.longitude], {
         radius: p.alert ? 11 : route ? 7 : 10,

@@ -124,23 +124,15 @@ function token() {
 
 export const api = {
   async login(username: string, password: string) {
-    if ((username === "admin" || username === "admin@driverguard.vn" || username === "admin@gmail.com") && password === "admin123") {
-      sessionStorage.setItem("driverguard_token", "admin_session_token");
-      return;
+    const email = username.trim();
+    if (!email.includes("@")) throw new Error("Nhập email tài khoản nhân viên được cấp");
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    const staff = (await getDoc(doc(db, "staff", result.user.uid))).data();
+    if (!staff?.active || !["admin", "dispatcher"].includes(staff.role)) {
+      await signOut(auth);
+      throw new Error("Tài khoản chưa được cấp quyền quản trị hoặc điều phối");
     }
-    try {
-      const email = username.includes("@") ? username : `${username}@driverguard.vn`;
-      const res = await signInWithEmailAndPassword(auth, email, password);
-      const token = await res.user.getIdToken();
-      sessionStorage.setItem("driverguard_token", token);
-    } catch {
-      // Fallback cho chế độ demo / admin local
-      if (password.length >= 6) {
-        sessionStorage.setItem("driverguard_token", `demo_${username}`);
-      } else {
-        throw new Error("Mật khẩu phải từ 6 ký tự trở lên hoặc dùng tài khoản admin/admin123");
-      }
-    }
+    sessionStorage.setItem("driverguard_token", await result.user.getIdToken());
   },
 
   logout() {

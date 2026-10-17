@@ -1,0 +1,5 @@
+participant,session,split,video,labels
+P01,awake_train,train,raw/videos/tinh_tao.mp4,labels/tinh_tao_eye_state.csv
+P01,drowsy_train,train,raw/videos/buon_ngu.mp4,labels/buon_ngu_eye_state.csv
+P01,awake_validation,validation,raw/videos/tinh_tao1.mp4,labels/tinh_tao1_eye_state.csv
+P01,drowsy_validation,validation,raw/videos/buon_ngu1.mp4,labels/buon_ngu1_labels.csv

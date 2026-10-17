@@ -1,0 +1,7 @@
+{
+  "indexes": [
+    { "collectionGroup": "alerts", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "userId", "order": "ASCENDING" }, { "fieldPath": "timestamp", "order": "DESCENDING" }] },
+    { "collectionGroup": "trips", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "userId", "order": "ASCENDING" }, { "fieldPath": "startTime", "order": "DESCENDING" }] }
+  ],
+  "fieldOverrides": []
+}
