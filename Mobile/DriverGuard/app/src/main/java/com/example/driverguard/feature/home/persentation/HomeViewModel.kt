@@ -19,7 +19,7 @@ class HomeViewModel : ViewModel() {
         val latestTrip = trips.firstOrNull()
         val totalAlertsInTrips = trips.sumOf { it.totalAlerts }
         val latestLabel = latestTrip?.let {
-            "${it.safetyScore}đ (${it.scoreGrade}) · ${it.totalAlerts} cảnh báo"
+            "${it.scoreLabel} · ${it.totalAlerts} cảnh báo"
         } ?: if (alerts.isNotEmpty()) "EAR ${"%.3f".format(alerts.first().ear)}" else "Chưa có cảnh báo"
 
         HomeUiState(

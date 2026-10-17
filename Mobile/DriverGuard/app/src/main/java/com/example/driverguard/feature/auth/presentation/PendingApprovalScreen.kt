@@ -23,6 +23,7 @@ import com.example.driverguard.core.theme.font
 
 @Composable
 fun PendingApprovalScreen(
+    onOpenDossier: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     Column(
@@ -44,7 +45,7 @@ fun PendingApprovalScreen(
         Spacer(Modifier.height(12.dp))
 
         Text(
-            text = "Tài khoản của bạn đã đăng ký thành công! Vui lòng chờ quản trị viên kích hoạt. " +
+            text = "Hãy hoàn thiện hồ sơ nghề nghiệp, nộp giấy tờ để quản lý đối chiếu và kích hoạt tài khoản. " +
                     "Màn hình này sẽ tự chuyển tiếp ngay khi được duyệt.",
             textAlign = TextAlign.Center,
             color = MaterialTheme.c.textMuted,
@@ -53,6 +54,10 @@ fun PendingApprovalScreen(
 
         Spacer(Modifier.height(32.dp))
 
+        OutlinedButton(onClick = onOpenDossier, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Text("Hoàn thiện hồ sơ và nộp giấy tờ")
+        }
+        Spacer(Modifier.height(12.dp))
         OutlinedButton(
             modifier = Modifier
                 .fillMaxWidth()

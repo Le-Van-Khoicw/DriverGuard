@@ -1,5 +1,6 @@
 package com.example.driverguard.navigation
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,10 +29,14 @@ import com.example.driverguard.feature.history.AlertDetailScreen
 import com.example.driverguard.feature.history.HistoryScreen
 import com.example.driverguard.feature.home.persentation.HomeScreen
 import com.example.driverguard.feature.settings.DevicesScreen
+import com.example.driverguard.feature.settings.DriverDossierScreen
+import com.example.driverguard.feature.settings.DriverDossierViewModel
 import com.example.driverguard.feature.settings.ProfileScreen
 import com.example.driverguard.feature.settings.SettingsScreen
 import com.example.driverguard.feature.settings.VehiclesScreen
 import com.example.driverguard.feature.splash.SplashScreen
+import com.example.driverguard.feature.dispatch.DispatchViewModel
+import com.example.driverguard.feature.dispatch.DispatchScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -39,8 +44,10 @@ private object Routes {
     const val SPLASH = "splash"
     const val LOGIN = "login"; const val REGISTER = "register"; const val VERIFY = "verify"; const val FORGOT = "forgot"
     const val PENDING = "pending"; const val LOCKED = "locked"
+    const val TRIPS = "dispatch_trips"
     const val HOME = "home"; const val MONITORING = "monitoring"; const val HISTORY = "history"
     const val ALERT = "alert/{alertId}"; const val SETTINGS = "settings"
+    const val DOSSIER = "driver_dossier"
     const val PROFILE = "profile"; const val DEVICES = "devices"; const val VEHICLES = "vehicles"
 }
 
@@ -52,6 +59,11 @@ fun AppNavigation() {
     val repository = remember { FirebaseAuthRepository() }
     val google = remember(context) { GoogleAuthClient(context) }
     val auth: AuthViewModel = viewModel(factory = AuthViewModelFactory(repository))
+    // A trip belongs to the activity, not to each new Monitoring back-stack entry.
+    val monitoring: MonitoringViewModel = viewModel()
+    val dispatch: DispatchViewModel = viewModel()
+    val dispatchState by dispatch.state.collectAsState()
+    val monitoringState by monitoring.uiState.collectAsState()
     val authState by auth.uiState.collectAsState()
 
     fun go(route: String, clear: Boolean = false) {
@@ -61,6 +73,7 @@ fun AppNavigation() {
         }
     }
     fun select(tab: MainTab) = go(when (tab) {
+        MainTab.TRIPS -> Routes.TRIPS
         MainTab.HOME -> Routes.HOME; MainTab.MONITORING -> Routes.MONITORING
         MainTab.HISTORY -> Routes.HISTORY; MainTab.SETTINGS -> Routes.SETTINGS
     })
@@ -73,6 +86,19 @@ fun AppNavigation() {
             state.isAuthenticated -> Routes.VERIFY
             else -> Routes.LOGIN
         }
+    }
+
+    LaunchedEffect(dispatchState.trips, dispatchState.fromCache, dispatchState.loaded, monitoringState.dispatchTripId, monitoringState.hasActiveTrip) {
+        val linkedId = monitoringState.dispatchTripId
+        if (linkedId != null && monitoringState.hasActiveTrip && dispatchState.loaded && !dispatchState.fromCache) {
+            val assigned = dispatchState.trips.find { it.id == linkedId }
+            if (assigned == null || assigned.assignmentVersion != monitoringState.assignmentVersion || assigned.status !in listOf("in_progress", "completion_pending")) {
+                monitoring.closeForDispatch(linkedId, monitoringState.assignmentVersion)
+            }
+        }
+    }
+    LaunchedEffect(authState.isAccountLocked) {
+        if (authState.isAccountLocked) { monitoring.pauseMonitoring(); go(Routes.LOCKED, true) }
     }
 
     NavHost(navController = nav, startDestination = Routes.SPLASH) {
@@ -133,7 +159,11 @@ fun AppNavigation() {
             )
         }
         composable(Routes.PENDING) {
-            PendingApprovalScreen { auth.logout(); go(Routes.LOGIN, true) }
+            LaunchedEffect(authState.canEnterApp, authState.isAccountLocked) {
+                if (authState.canEnterApp) go(Routes.HOME, true)
+                else if (authState.isAccountLocked) go(Routes.LOCKED, true)
+            }
+            PendingApprovalScreen(onOpenDossier = { go(Routes.DOSSIER) }) { auth.logout(); go(Routes.LOGIN, true) }
         }
         composable(Routes.LOCKED) {
             AccountLockedScreen(
@@ -145,15 +175,22 @@ fun AppNavigation() {
         composable(Routes.HOME) {
             MainScaffold(MainTab.HOME, ::select) {
                 HomeScreen(
-                    onStartMonitoring = { go(Routes.MONITORING) },
+                    onStartMonitoring = { go(Routes.TRIPS) },
                     onOpenHistory = { go(Routes.HISTORY) },
                     onOpenVehicles = { go(Routes.VEHICLES) }
                 )
             }
         }
+        composable(Routes.TRIPS) {
+            MainScaffold(MainTab.TRIPS, ::select) {
+                DispatchScreen(dispatch, onMonitor = { trip ->
+                    if (monitoring.bindDispatchTrip(trip.id, trip.assignmentVersion)) go(Routes.MONITORING)
+                    else go(Routes.MONITORING)
+                }, onFinishMonitoring = { trip -> monitoring.closeForDispatch(trip.id, trip.assignmentVersion) })
+            }
+        }
         composable(Routes.MONITORING) {
-            val vm: MonitoringViewModel = viewModel()
-            MainScaffold(MainTab.MONITORING, ::select) { MonitoringScreen(vm) }
+            MainScaffold(MainTab.MONITORING, ::select) { MonitoringScreen(monitoring) }
         }
         composable(Routes.HISTORY) {
             MainScaffold(MainTab.HISTORY, ::select) { HistoryScreen { go("alert/$it") } }
@@ -168,7 +205,11 @@ fun AppNavigation() {
                 }
             }
         }
-        composable(Routes.PROFILE) { ProfileScreen(user = authState.currentUser) { nav.popBackStack() } }
+        composable(Routes.PROFILE) { ProfileScreen(user = authState.currentUser, onOpenDossier = { go(Routes.DOSSIER) }) { nav.popBackStack() } }
+        composable(Routes.DOSSIER) {
+            val dossier: DriverDossierViewModel = viewModel()
+            DriverDossierScreen(dossier) { nav.popBackStack() }
+        }
         composable(Routes.DEVICES) { DevicesScreen { nav.popBackStack() } }
         composable(Routes.VEHICLES) { VehiclesScreen { nav.popBackStack() } }
     }

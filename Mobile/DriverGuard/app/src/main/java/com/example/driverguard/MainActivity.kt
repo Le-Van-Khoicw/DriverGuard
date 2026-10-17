@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.driverguard.feature.history.AlarmRepository.initialize(applicationContext)
 
         enableEdgeToEdge()
         UserProfileRepository.loadUserProfile()

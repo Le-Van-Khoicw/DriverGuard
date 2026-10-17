@@ -9,20 +9,26 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
+        android:name=".DriverGuardApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:label="${driverGuardLabel}"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.DriverGuard">
+        <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:authorities="${applicationId}.firebaseinitprovider"
+            android:enabled="${firebaseInitEnabled}"
+            tools:replace="android:enabled" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:supportsPictureInPicture="true"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
-            android:label="@string/app_name"
+            android:label="${driverGuardLabel}"
             android:theme="@style/Theme.DriverGuard">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

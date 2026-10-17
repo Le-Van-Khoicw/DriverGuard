@@ -41,6 +41,30 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:925387921691:android:0000000000000000000000",
+        "android_client_info": {
+          "package_name": "com.example.driverguard.local"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "demo-driverguard.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDemoDriverGuardLocalOnly00000000000"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
     }
   ],
   "configuration_version": "1"

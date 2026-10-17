@@ -43,6 +43,11 @@ enum class MainTab(
         selectedIcon = Icons.Filled.Dashboard,
         unselectedIcon = Icons.Outlined.Dashboard
     ),
+    TRIPS(
+        label = "Chuyến",
+        selectedIcon = Icons.Filled.Dashboard,
+        unselectedIcon = Icons.Outlined.Dashboard
+    ),
     MONITORING(
         label = "Giám sát",
         selectedIcon = Icons.Filled.RemoveRedEye,

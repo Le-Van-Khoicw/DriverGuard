@@ -667,7 +667,7 @@ private fun TripSummaryCard(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "${trip.safetyScore}đ · Hạng ${trip.scoreGrade}",
+                        text = trip.scoreLabel,
                         color = badgeColor,
                         fontSize = font.xs,
                         fontWeight = font.bold
@@ -692,14 +692,14 @@ private fun TripSummaryCard(
                     Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = c.textSubtle, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        text = "${trip.totalAlerts} cảnh báo · PERCLOS ${"%.1f".format(trip.perclosEstimatedPercent)}%",
+                        text = "${trip.totalAlerts} cảnh báo · Quan sát ${"%.0f".format(trip.measurementCoverage * 100)}%",
                         color = c.textSubtle,
                         fontSize = font.xs
                     )
                 }
 
                 Text(
-                    text = "Xem chi tiết AI ›",
+                    text = "Xem báo cáo ›",
                     color = c.primary,
                     fontSize = font.xs,
                     fontWeight = font.bold

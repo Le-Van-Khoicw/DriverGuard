@@ -44,6 +44,8 @@ import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -83,6 +85,10 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
     val c = MaterialTheme.c
     val font = MaterialTheme.font
     val state by viewModel.uiState.collectAsState()
+    var confirmCompletion by remember { mutableStateOf(false) }
+    DisposableEffect(viewModel) {
+        onDispose { viewModel.pauseMonitoring() }
+    }
     val inPip by PipManager.isInPipMode.collectAsState()
     val context = LocalContext.current
     val activity = context as? Activity
@@ -457,7 +463,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            text = "Bấm 'Bắt đầu giám sát' để kích hoạt camera AI\nvà phát hiện dấu hiệu buồn ngủ thời gian thực",
+                            text = "Bấm 'Bắt đầu giám sát' hoặc 'Tiếp tục giám sát' để kích hoạt camera AI\nvà phát hiện dấu hiệu buồn ngủ thời gian thực",
                             color = c.textMuted,
                             fontSize = font.xs,
                             textAlign = TextAlign.Center
@@ -543,7 +549,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
 
         // ── Thông điệp hệ thống ──
         Text(
-            text = state.message,
+            text = (state.dispatchTripId?.let { "Chuyến ${it.take(8)} · phân công v${state.assignmentVersion}\n" } ?: "Phiên độc lập — chọn tab Chuyến để gắn giám sát vào chuyến hàng.\n") + state.message,
             color = if (state.status == MonitoringStatus.DROWSY) c.danger else c.textMuted,
             fontSize = font.sm,
             fontWeight = if (state.status == MonitoringStatus.DROWSY) font.bold else font.regular
@@ -574,9 +580,9 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
             MetricCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Outlined.Psychology,
-                title = "Độ tin cậy",
+                title = "EAR thấp (<0,25)",
                 value = state.confidence?.let { "${(it * 100).toInt()}%" } ?: "--",
-                subtitle = "Model AI",
+                subtitle = "Trong 13 mẫu gần nhất",
                 accentColor = c.primary
             )
         }
@@ -590,7 +596,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                 icon = Icons.Outlined.NotificationsActive,
                 title = "Số cảnh báo",
                 value = "${state.warningCount}",
-                subtitle = "Lần buồn ngủ",
+                subtitle = "Sự kiện nhắm kéo dài",
                 accentColor = if (state.warningCount > 0) c.danger else c.safe
             )
             MetricCard(
@@ -675,6 +681,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
 
         if (!isRunning) {
             Button(
+                enabled = !state.isRestoring && !state.isCompleting && state.persistenceError == null,
                 onClick = {
                     if (hasCameraPermission && hasLocationPermission) {
                         viewModel.startMonitoring()
@@ -700,7 +707,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                 Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Bắt đầu giám sát",
+                    text = if (state.isRestoring) "Đang khôi phục phiên…" else if (state.hasActiveTrip) "Tiếp tục giám sát" else "Bắt đầu giám sát",
                     fontSize = font.base,
                     fontWeight = font.semibold
                 )
@@ -711,7 +718,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Button(
-                    onClick = viewModel::stopMonitoring,
+                    onClick = viewModel::pauseMonitoring,
                     modifier = Modifier
                         .weight(1f)
                         .height(52.dp),
@@ -724,7 +731,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                     Icon(Icons.Outlined.Stop, contentDescription = null, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = "Dừng",
+                        text = "Tạm dừng",
                         fontSize = font.base,
                         fontWeight = font.semibold
                     )
@@ -751,26 +758,34 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                 }
             }
 
-            // Nút thử nghiệm nhanh cho thầy cô / thuyết trình
-            OutlinedButton(
-                onClick = viewModel::simulateDrowsiness,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Outlined.Science, contentDescription = null, tint = c.warningText, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Mô phỏng buồn ngủ (Demo)",
-                    color = c.warningText,
-                    fontSize = font.sm,
-                    fontWeight = font.semibold
-                )
-            }
+
         }
 
         // ── DIALOG BÁO CÁO AI TỔNG KẾT SAU CHUYẾN ĐI ──
+        if (state.hasActiveTrip) {
+            Button(
+                onClick = { confirmCompletion = true },
+                enabled = !state.isCompleting && !state.isRestoring,
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) {
+                Text(if (state.isCompleting) "Đang lưu phiên…" else "Kết thúc phiên giám sát")
+            }
+        }
+        state.persistenceError?.let {
+            Text("Chưa lưu được trên máy: $it", color = c.danger, fontSize = font.sm)
+            TextButton(onClick = viewModel::retryPersistence) { Text("Thử lưu / khôi phục lại") }
+        }
+        if (confirmCompletion && state.hasActiveTrip) {
+            AlertDialog(
+                onDismissRequest = { confirmCompletion = false },
+                title = { Text("Kết thúc phiên giám sát?") },
+                text = { Text("Giám sát sẽ dừng. Báo cáo được tính và lưu trên máy ngay cả khi không có mạng.") },
+                confirmButton = {
+                    TextButton(onClick = { confirmCompletion = false; viewModel.completeTrip() }) { Text("Hoàn thành") }
+                },
+                dismissButton = { TextButton(onClick = { confirmCompletion = false }) { Text("Tiếp tục giám sát") } }
+            )
+        }
         if (state.tripSummary != null) {
             TripSummaryDialog(
                 summary = state.tripSummary!!,
@@ -889,6 +904,7 @@ private fun statusLabel(status: MonitoringStatus): String = when (status) {
     MonitoringStatus.IDLE        -> "CHƯA BẮT ĐẦU"
     MonitoringStatus.CALIBRATING -> "ĐANG HIỆU CHỈNH"
     MonitoringStatus.MONITORING  -> "ĐANG GIÁM SÁT"
-    MonitoringStatus.DROWSY      -> "🚨 BUỒN NGỦ!"
+    MonitoringStatus.DROWSY      -> "MẮT NHẮM KÉO DÀI"
+    MonitoringStatus.PAUSED      -> "ĐÃ TẠM DỪNG"
     MonitoringStatus.STOPPED     -> "ĐÃ DỪNG"
 }

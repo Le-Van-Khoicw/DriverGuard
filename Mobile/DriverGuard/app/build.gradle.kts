@@ -4,6 +4,10 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+val localFirebase = providers.gradleProperty("firebaseEmulators").orElse("false").get().toBooleanStrict()
+val localFirebaseHost = providers.gradleProperty("firebaseEmulatorHost").orElse("10.0.2.2").get()
+require(localFirebaseHost.matches(Regex("[A-Za-z0-9.-]+"))) { "Invalid emulator host" }
+
 android {
     namespace = "com.example.driverguard"
     compileSdk {
@@ -18,11 +22,18 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
+        buildConfigField("boolean", "FIREBASE_EMULATORS", localFirebase.toString())
+        buildConfigField("String", "FIREBASE_EMULATOR_HOST", "\"$localFirebaseHost\"")
+        manifestPlaceholders["firebaseInitEnabled"] = (!localFirebase).toString()
+        manifestPlaceholders["driverGuardLabel"] = if (localFirebase) "DriverGuard Local" else "@string/app_name"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            if (localFirebase) applicationIdSuffix = ".local"
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -37,6 +48,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -60,6 +72,8 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-functions")
+    implementation("com.google.firebase:firebase-storage")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
     implementation("androidx.credentials:credentials:1.3.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.3.0")

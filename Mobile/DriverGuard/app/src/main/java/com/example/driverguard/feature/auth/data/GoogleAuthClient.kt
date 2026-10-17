@@ -23,6 +23,7 @@ class GoogleAuthClient(
     private val firebaseAuth = FirebaseAuth.getInstance()
 
     suspend fun signIn(activity: Activity): Result<AuthUser> = runCatching {
+        check(!com.example.driverguard.BuildConfig.FIREBASE_EMULATORS) { "Bản local dùng email/mật khẩu tài khoản demo, không đăng nhập Google thật" }
         // 1. Thử dùng Credential Manager (Native Dialog)
         val nativeIdTokenResult = runCatching {
             val googleIdOption = GetGoogleIdOption.Builder()

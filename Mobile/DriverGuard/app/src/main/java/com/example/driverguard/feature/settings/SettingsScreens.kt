@@ -1,4 +1,5 @@
 package com.example.driverguard.feature.settings
+import androidx.compose.material3.OutlinedButton
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -170,7 +171,7 @@ fun SettingsScreen(
 // Màn hình Hồ sơ — Lấy email thật từ Firebase & cho phép đổi avatar + chỉnh sửa
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-fun ProfileScreen(user: AuthUser? = null, onBack: () -> Unit) {
+fun ProfileScreen(user: AuthUser? = null, onOpenDossier: () -> Unit = {}, onBack: () -> Unit) {
     val c    = MaterialTheme.c
     val font = MaterialTheme.font
     val profile by UserProfileRepository.profile.collectAsState()
@@ -281,6 +282,9 @@ fun ProfileScreen(user: AuthUser? = null, onBack: () -> Unit) {
         )
 
         // ── Card thông tin cá nhân ──
+        OutlinedButton(onClick = onOpenDossier, modifier = Modifier.fillMaxWidth()) {
+            Text("Hồ sơ nghề nghiệp và giấy tờ tài xế")
+        }
         SectionLabel("Thông tin cá nhân", c.textMuted.copy(alpha = 0.8f), font.sm)
         Card(
             modifier = Modifier.fillMaxWidth(),
