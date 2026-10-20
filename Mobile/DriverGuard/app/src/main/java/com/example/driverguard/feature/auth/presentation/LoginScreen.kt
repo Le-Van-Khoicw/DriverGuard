@@ -90,6 +90,12 @@ fun LoginScreen(
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.c.textMuted
         )
+        if (com.example.driverguard.BuildConfig.FIREBASE_EMULATORS) {
+            Spacer(Modifier.height(12.dp))
+            Text("BẢN LOCAL · demo-driverguard", color = MaterialTheme.c.primary)
+            Text("Tài khoản Firebase thật không tự có ở bản này. Dùng tài khoản local hoặc đăng ký mới trên bản Local.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.c.textMuted)
+        }
         Spacer(Modifier.height(32.dp))
 
         EmailTextField(

@@ -38,7 +38,9 @@ fun ForgotPasswordScreen(viewModel: AuthViewModel, onBack: () -> Unit) {
             color = MaterialTheme.c.text
         )
         Text(
-            text = "Nhập email đã đăng ký. Firebase sẽ gửi đường dẫn đặt lại mật khẩu.",
+            text = if (com.example.driverguard.BuildConfig.FIREBASE_EMULATORS)
+                "BẢN LOCAL: chỉ reset tài khoản trong demo-driverguard, không đổi mật khẩu Firebase thật. Emulator không gửi email; đường dẫn reset hiện trong terminal chạy máy chủ."
+            else "Nhập email đã đăng ký. Firebase sẽ gửi đường dẫn đặt lại mật khẩu.",
             color = MaterialTheme.c.textMuted,
             fontSize = MaterialTheme.font.base
         )
@@ -58,7 +60,9 @@ fun ForgotPasswordScreen(viewModel: AuthViewModel, onBack: () -> Unit) {
         }
         if (state.isPasswordResetEmailSent) {
             Text(
-                text = "Đã gửi email đặt lại mật khẩu. Hãy kiểm tra cả thư rác.",
+                text = if (com.example.driverguard.BuildConfig.FIREBASE_EMULATORS)
+                    "Đã gửi yêu cầu local. Nếu email có tài khoản phù hợp, nhờ người chạy Start-Local.ps1 mở đường dẫn reset trong terminal; không có thư gửi tới hộp mail."
+                else "Nếu email có tài khoản phù hợp, hướng dẫn đặt lại mật khẩu sẽ được gửi đến hộp thư. Kiểm tra cả thư rác.",
                 color = MaterialTheme.c.safe,
                 fontSize = MaterialTheme.font.sm
             )
@@ -72,7 +76,7 @@ fun ForgotPasswordScreen(viewModel: AuthViewModel, onBack: () -> Unit) {
                 CircularProgressIndicator(color = MaterialTheme.c.textOnColor)
             } else {
                 Text(
-                    text = "Gửi email đặt lại mật khẩu",
+                    text = if (com.example.driverguard.BuildConfig.FIREBASE_EMULATORS) "Yêu cầu reset mật khẩu local" else "Gửi email đặt lại mật khẩu",
                     color = MaterialTheme.c.textOnColor,
                     fontSize = MaterialTheme.font.base,
                     fontWeight = MaterialTheme.font.semibold

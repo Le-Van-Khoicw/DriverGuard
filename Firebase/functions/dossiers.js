@@ -1,4 +1,4 @@
-import { getStorage } from 'firebase-admin/storage';
+import { documentKinds, requiredDocumentKinds, parseDocumentPath, documentMetadata } from './document-storage.js';
 import { HttpsError } from 'firebase-functions/v2/https';
 
 const invalid = message => { throw new HttpsError('invalid-argument', message); };
@@ -6,7 +6,7 @@ const required = (value, label, max = 300) => {
   if (typeof value !== 'string' || !value.trim() || value.length > max) invalid(`Thiếu hoặc sai ${label}`);
   return value.trim();
 };
-export const dossierDocuments = ['identity_front', 'identity_back', 'license_front', 'license_back', 'health'];
+export const dossierDocuments = documentKinds;
 export function endOfVietnamDate(value, label) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) invalid(`${label}: dùng ngày yyyy-MM-dd`);
   const day = new Date(`${value}T00:00:00Z`);
@@ -25,15 +25,14 @@ export async function validateDossier(p, uid, now) {
   if (licenseIssuedAt >= licenseExpiresAt || healthCheckedAt >= healthExpiresAt || licenseExpiresAt <= now || healthExpiresAt <= now) invalid('Kiểm tra lại ngày cấp/khám và hạn còn hiệu lực');
   if (licenseIssuedAt - 86_400_000 + 1 > now || healthCheckedAt - 86_400_000 + 1 > now) invalid('Ngày cấp GPLX / ngày khám không được ở tương lai');
   const docs = p.documents;
-  if (!Array.isArray(docs) || docs.length !== dossierDocuments.length || new Set(docs.map(d => d.kind)).size !== docs.length) invalid('Cần đủ 5 tệp giấy tờ, không trùng loại');
-  const documents = await Promise.all(dossierDocuments.map(async kind => {
-    const document = docs.find(d => d.kind === kind);
+  if (!Array.isArray(docs) || docs.length > dossierDocuments.length || docs.some(d => !d || !dossierDocuments.includes(d.kind)) ||
+      new Set(docs.map(d => d.kind)).size !== docs.length || requiredDocumentKinds.some(kind => !docs.some(d => d.kind === kind))) invalid('Cần hai mặt GPLX; giấy tờ bổ sung không được trùng loại');
+  const documents = await Promise.all(docs.map(async document => {
+    const kind = document.kind;
     const path = required(document?.path, `tệp ${kind}`, 500);
-    if (!path.startsWith(`driver-documents/${uid}/${kind}/`) || path.split('/').length !== 4 || path.includes('..')) invalid('Đường dẫn giấy tờ không thuộc tài khoản');
-    const bucket = getStorage().bucket(process.env.FUNCTIONS_EMULATOR === 'true' ? 'demo-driverguard.appspot.com' : undefined);
-    let metadata;
-    try { [metadata] = await bucket.file(path).getMetadata(); } catch { invalid(`Chưa tải xong tệp ${kind}; chọn và tải lại`); }
-    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(metadata.contentType) || Number(metadata.size) > 5 * 1024 * 1024) invalid('Chỉ nhận JPG, PNG, PDF tối đa 5 MB/tệp');
+    const parsed = parseDocumentPath(path);
+    if (parsed.uid !== uid || parsed.kind !== kind) invalid('Đường dẫn giấy tờ không thuộc tài khoản');
+    const metadata = await documentMetadata(path);
     return { kind, path, name: required(document.name, 'tên tệp', 180), contentType: metadata.contentType, size: Number(metadata.size) };
   }));
   const emergencyPhone = required(p.emergencyPhone, 'điện thoại khẩn cấp', 30);
@@ -49,7 +48,10 @@ export async function validateDossier(p, uid, now) {
   };
 }
 export function requireApprovedDossier(driver, until, vehicleId) {
-  if (driver?.qualificationStatus !== 'approved') throw new HttpsError('failed-precondition', 'Hồ sơ tài xế chưa được quản lý duyệt');
+  const name = driver?.displayName || 'Tài xế được chọn';
+  if (!driver?.qualificationStatus) throw new HttpsError('failed-precondition', `${name} chưa nộp hồ sơ nghề nghiệp. Tài xế cần nộp trên app trước khi quản lý có thể duyệt.`);
+  if (driver.qualificationStatus === 'submitted') throw new HttpsError('failed-precondition', `Hồ sơ của ${name} đang chờ duyệt. Mở Tài xế → Xem/duyệt hồ sơ để xử lý.`);
+  if (driver.qualificationStatus !== 'approved') throw new HttpsError('failed-precondition', `Hồ sơ của ${name} cần bổ sung và duyệt lại trước khi phân công.`);
   if (!(driver.licenseExpiresAt > until) || !(driver.healthExpiresAt > until)) throw new HttpsError('failed-precondition', 'Giấy phép/hồ sơ sức khỏe hết hạn trước khi kết thúc chuyến');
   if (vehicleId && !driver.approvedVehicleIds?.includes(vehicleId)) throw new HttpsError('failed-precondition', 'Quản lý chưa xác nhận hồ sơ tài xế phù hợp với xe này');
 }

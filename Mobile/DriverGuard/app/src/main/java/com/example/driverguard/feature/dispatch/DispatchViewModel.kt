@@ -8,7 +8,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.firestore.Source
-import com.google.firebase.functions.FirebaseFunctions
+import com.example.driverguard.data.BusinessFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -47,7 +47,6 @@ fun dispatchLabel(status: String): String = mapOf(
 class DispatchViewModel(application: Application) : AndroidViewModel(application) {
     private val auth = FirebaseAuth.getInstance()
     private val db = FirebaseFirestore.getInstance()
-    private val functions = FirebaseFunctions.getInstance("asia-southeast1")
     private val preferences = application.getSharedPreferences("dispatch_outbox_v1", 0)
     private val _state = MutableStateFlow(DispatchState())
     val state = _state.asStateFlow()
@@ -119,7 +118,7 @@ class DispatchViewModel(application: Application) : AndroidViewModel(application
         _state.value = _state.value.copy(busy = true, error = null, message = null)
         viewModelScope.launch {
             try {
-                withTimeout(25_000) { functions.getHttpsCallable("dispatchCommand").call(operation).await() }
+                withTimeout(100_000) { BusinessFunctions.command().call(operation).await() }
                 if (uid == account) { _state.value = _state.value.copy(message = "Máy chủ đã xác nhận. Đang cập nhật chuyến…"); onSuccess() }
             } catch (e: Exception) { if (uid == account) _state.value = _state.value.copy(error = "Chưa nhận xác nhận: ${e.message}. Kiểm tra trạng thái chuyến trước khi thử lại.") }
             finally { if (uid == account) _state.value = _state.value.copy(busy = false) }
@@ -154,7 +153,7 @@ class DispatchViewModel(application: Application) : AndroidViewModel(application
             while (uid == account && queue.isNotEmpty() && !rejected) {
                 val op = queue.first()
                 try {
-                    withTimeout(25_000) { functions.getHttpsCallable("dispatchCommand").call(op).await() }
+                    withTimeout(100_000) { BusinessFunctions.command().call(op).await() }
                     if (uid != account) return
                     // Keep the optimistic operation until its authoritative replacement has arrived.
                     // If this read loses connection, replaying the same operationId is safe.

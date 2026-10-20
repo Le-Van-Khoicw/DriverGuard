@@ -46,11 +46,15 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Giấy tờ đính kèm (${state.documents.size}/5)", style = MaterialTheme.typography.titleMedium)
+                Text("GPLX bắt buộc (${state.documents.count { it.kind in requiredDossierDocuments }}/2)", style = MaterialTheme.typography.titleMedium)
+                Text("Hai mặt GPLX cần có để nộp. Tệp căn cước và sức khỏe chỉ đính kèm khi công ty yêu cầu.", style = MaterialTheme.typography.bodySmall)
                 Text("JPG, PNG hoặc PDF, tối đa 5 MB/tệp. Cần mạng để tải tệp và nộp hồ sơ. Chỉ bạn và quản trị được xem giấy tờ.", style = MaterialTheme.typography.bodySmall)
                 dossierDocumentNames.forEach { (kind, name) ->
                     Text(name)
-                    state.documents.find { it.kind == kind }?.let { Text("Đã tải: ${it.name}", style = MaterialTheme.typography.bodySmall) }
+                    state.documents.find { it.kind == kind }?.let {
+                        Text("Đã tải: ${it.name}", style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { viewModel.removeDocument(kind) }, enabled = !state.busy && !state.loading) { Text("Bỏ tệp khỏi bản nháp") }
+                    }
                     OutlinedButton(onClick = { uploadKind = kind; picker.launch(arrayOf("image/jpeg", "image/png", "application/pdf")) }, enabled = !state.busy && !state.loading) { Text(if (state.documents.any { it.kind == kind }) "Chọn tệp thay thế" else "Chọn tệp") }
                 }
             }

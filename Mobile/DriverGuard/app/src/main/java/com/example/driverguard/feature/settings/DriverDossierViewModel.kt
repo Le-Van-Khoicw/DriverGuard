@@ -8,9 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
-import com.google.firebase.functions.FirebaseFunctions
-import com.google.firebase.storage.FirebaseStorage
-import com.google.firebase.storage.StorageMetadata
+import com.example.driverguard.data.BusinessFunctions
+import com.example.driverguard.data.DocumentFiles
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -101,6 +100,13 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
             if (stillOwner()) _state.value = _state.value.copy(busy = false)
         }
     }
+    fun removeDocument(kind: String) {
+        if (!stillOwner() || _state.value.busy) return
+        operationId = null
+        // Remove from draft only; previously submitted/approved file objects stay immutable.
+        _state.value = _state.value.copy(documents = _state.value.documents.filterNot { it.kind == kind }, dirty = true, error = null, message = "Đã bỏ tệp khỏi bản nháp. Hồ sơ đã nộp vẫn giữ cho đến khi nộp lại.")
+        runCatching { saveDraft() }.onFailure { _state.value = _state.value.copy(error = it.message) }
+    }
     fun upload(kind: String, uri: Uri) {
         if (!stillOwner() || _state.value.busy || !dossierDocumentNames.containsKey(kind)) return
         _state.value = _state.value.copy(busy = true, error = null, message = "Đang tải giấy tờ…")
@@ -121,8 +127,7 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
                     data to fileName.take(180)
                 }
                 check(stillOwner()) { "Tài khoản đã thay đổi" }
-                val path = "driver-documents/$uid/$kind/${UUID.randomUUID()}"
-                withTimeout(60_000) { FirebaseStorage.getInstance().reference.child(path).putBytes(bytes, StorageMetadata.Builder().setContentType(mime).build()).await() }
+                val path = withTimeout(190_000) { DocumentFiles.upload(uid, kind, mime, bytes) }
                 if (!stillOwner()) return@launch
                 operationId = null
                 _state.value = _state.value.copy(documents = _state.value.documents.filterNot { it.kind == kind } + DossierFile(kind, path, name), dirty = true, message = "Đã tải $name. Cần bấm Nộp hồ sơ để quản lý nhận được.")
@@ -134,8 +139,8 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
     fun submit() {
         val s = _state.value
         if (!stillOwner() || s.busy || s.loading || s.conflict) return
-        if (dossierFields.any { s.fields[it.key].isNullOrBlank() } || s.documents.size != dossierDocumentNames.size) {
-            _state.value = s.copy(error = "Điền đủ thông tin và tải đủ 5 tệp giấy tờ trước khi nộp"); return
+        if (dossierFields.any { s.fields[it.key].isNullOrBlank() } || requiredDossierDocuments.any { kind -> s.documents.none { it.kind == kind } }) {
+            _state.value = s.copy(error = "Điền đủ thông tin và tải hai mặt GPLX trước khi nộp. Tệp căn cước/sức khỏe là tùy chọn."); return
         }
         operationId = operationId ?: UUID.randomUUID().toString()
         runCatching { saveDraft() }.onFailure { _state.value = s.copy(error = it.message); return }
@@ -144,7 +149,7 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
             try {
                 val request = s.fields + mapOf("action" to "submitDriverDossier", "operationId" to operationId, "revision" to s.revision,
                     "documents" to s.documents.map { mapOf("kind" to it.kind, "path" to it.path, "name" to it.name) })
-                withTimeout(60_000) { FirebaseFunctions.getInstance("asia-southeast1").getHttpsCallable("dispatchCommand").call(request).await() }
+                withTimeout(100_000) { BusinessFunctions.command().call(request).await() }
                 val confirmed = doc.get(Source.SERVER).await()
                 if (!stillOwner()) return@launch
                 latestRemote = confirmed.data; check(preferences.edit().remove(uid).commit()) { "Đã nộp nhưng chưa xóa được bản nháp" }
@@ -173,5 +178,6 @@ val dossierFields = listOf(
     DossierField("emergencyName", "Người liên hệ khẩn cấp", "VD: Nguyễn Thị An — vợ", "Liên hệ khẩn cấp"),
     DossierField("emergencyPhone", "Điện thoại khẩn cấp", "VD: 0912345678", "Liên hệ khẩn cấp")
 )
-val dossierDocumentNames = linkedMapOf("identity_front" to "Căn cước — mặt trước", "identity_back" to "Căn cước — mặt sau",
-    "license_front" to "GPLX — mặt trước", "license_back" to "GPLX — mặt sau", "health" to "Giấy khám / xác nhận sức khỏe")
+val requiredDossierDocuments = setOf("license_front", "license_back")
+val dossierDocumentNames = linkedMapOf("license_front" to "GPLX — mặt trước (bắt buộc)", "license_back" to "GPLX — mặt sau (bắt buộc)",
+    "identity_front" to "Căn cước — mặt trước (tùy chọn)", "identity_back" to "Căn cước — mặt sau (tùy chọn)", "health" to "Giấy khám / xác nhận sức khỏe (tùy chọn)")

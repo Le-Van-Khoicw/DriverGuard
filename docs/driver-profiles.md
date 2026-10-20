@@ -26,8 +26,8 @@ Không đổi khóa `sender` của dữ liệu cũ; giao diện dùng tên “Ng
 Thông tin: họ tên theo giấy tờ, ngày sinh, điện thoại, địa chỉ, căn cước, số/hạng GPLX,
 ngày cấp/hết hạn, ngày khám/hạn hồ sơ sức khỏe, người và số liên hệ khẩn cấp.
 
-Trong phạm vi demo, bộ hồ sơ nội bộ cần 5 tệp: căn cước hai mặt, GPLX hai mặt,
-giấy khám/xác nhận sức khỏe. JPG/PNG/PDF, mỗi tệp tối đa 5 MB. Đây là **quy trình
+Trong phạm vi đề tài, bắt buộc hai mặt GPLX; căn cước hai mặt và giấy khám/xác nhận
+sức khỏe là tệp bổ sung tùy chọn. JPG/PNG/PDF, mỗi tệp tối đa 5 MB. Đây là **quy trình
 hồ sơ nội bộ được chọn cho đồ án**, không phải danh mục mọi giấy tờ pháp luật yêu
 cầu tài xế mang theo khi đi đường. Tài liệu phương tiện thuộc hồ sơ xe công ty,
 không yêu cầu tài xế tải lại vào hồ sơ cá nhân. Đề tài chỉ chở hàng thông thường.
@@ -44,7 +44,7 @@ từ khối lượng hàng (kg); quản lý đối chiếu giấy tờ xe thực
 ```text
 Đăng ký / xác minh email
         ↓
-Hồ sơ nghề nghiệp → nhập thông tin → tải 5 tệp → nộp hồ sơ
+Hồ sơ nghề nghiệp → nhập thông tin → tải hai mặt GPLX + tệp bổ sung nếu cần → nộp
         ↓
 Admin mở hồ sơ → xem tệp → đối chiếu → chọn xe được phép phân công
         ├→ Yêu cầu bổ sung, có lý do → tài xế sửa và nộp lại
@@ -77,8 +77,10 @@ Nháp giấy tờ không được đưa vào Android Auto Backup/Device Transfer
   không ghi trực tiếp, mọi lần nộp/duyệt đi qua máy chủ.
 - `drivers/{uid}` chỉ chứa tóm tắt phục vụ điều phối: trạng thái, hạng, hạn và xe được
   xác nhận. Điều phối không được đọc ảnh căn cước hoặc hồ sơ sức khỏe chi tiết.
-- Tệp ở `driver-documents/{uid}/{kind}/{uuid}`, Storage Rules giới hạn chủ hồ sơ/admin.
-  Đường dẫn chỉ là khóa lưu trữ; web lấy blob có xác thực, không hiển thị download URL công khai.
+- Online: tệp ở Supabase Private, hồ sơ lưu khóa `supabase:driver-documents/{uid}/{kind}/{uuid}`.
+  Upload/download qua Render với Firebase ID token; server giới hạn chủ hồ sơ/admin.
+  Local/legacy: Firebase Storage/emulator tiếp tục dùng khóa không có tiền tố `supabase:`.
+  Web lấy blob có xác thực, không hiển thị download URL công khai. Khóa Supabase chỉ ở server.
 - Tệp bất biến sau upload; thay tệp tạo đối tượng mới và yêu cầu nộp/duyệt lại.
 - Ghi chú duyệt hồ sơ riêng tư không sao chép vào audit chung mà dispatcher đọc được.
 - Chưa có tác vụ dọn tệp upload dở/bỏ nháp hoặc chính sách lưu trữ/xóa hồ sơ nghỉ việc.
@@ -96,3 +98,19 @@ cá nhân thật chỉ để lấp dữ liệu demo.
 
 Đã biên dịch Web/Android và khởi động emulator có Storage. Chưa kiểm thử tự động
 hoặc nghiệm thu đầy đủ việc tải tệp, quyền truy cập, xung đột và luồng nộp → duyệt.
+
+## 7. Làm rõ thao tác tài khoản và duyệt hồ sơ
+
+- Trang Tài xế tách cột Tài khoản và Hồ sơ nghề nghiệp. Nút **Lưu tài khoản** chỉ
+  cập nhật mã nhân viên/trạng thái; nút **Xem/duyệt hồ sơ** mở đúng hồ sơ tài xế.
+- Admin đang đăng nhập có quyền xét duyệt, nhưng không thể duyệt bộ giấy tờ chưa
+  được tài xế nộp. TX001 demo cũ có tài khoản active và chưa nộp hồ sơ, nên chưa đủ
+  điều kiện phân công. Không tự giả lập giấy tờ/đánh dấu đã duyệt để bỏ qua điều kiện.
+- Lưu lại một tài khoản đã active không tự kích hoạt lại, không giả định giấy tờ
+  đã được duyệt. Chuyển tài khoản chưa active sang active vẫn yêu cầu hồ sơ hợp lệ.
+- Form lập/giao chuyến vô hiệu hóa lựa chọn tài xế thiếu điều kiện, ghi cụ thể lý do,
+  cho mở hồ sơ ngay trong form. Đổi xe/hạn kết thúc tính lại điều kiện chọn tài xế.
+- Số lượng ở đơn vận chuyển lưu dạng chuỗi khi đang nhập để giữ được ô trống;
+  chỉ chuyển số khi gửi. Kiện/thùng/pallet/bao/cái/hộp dùng số nguyên dương,
+  spinner bước 1. Kg/tấn/lít/m… cho phép số lẻ. Cùng kiểm tra ở máy chủ và khi
+  tài xế ghi số lượng thực nhận/giao, không chỉ dựa vào thuộc tính HTML.

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -6,6 +8,13 @@ plugins {
 
 val localFirebase = providers.gradleProperty("firebaseEmulators").orElse("false").get().toBooleanStrict()
 val localFirebaseHost = providers.gradleProperty("firebaseEmulatorHost").orElse("10.0.2.2").get()
+val onlineProperties = Properties().apply {
+    val configFile = rootProject.file("online.properties")
+    if (configFile.exists()) configFile.inputStream().use { load(it) }
+}
+val dispatchApiUrl = providers.gradleProperty("dispatchApiUrl").orElse(providers.environmentVariable("DISPATCH_API_URL"))
+    .orElse(onlineProperties.getProperty("dispatchApiUrl", "")).get().trimEnd('/')
+require(dispatchApiUrl.isEmpty() || dispatchApiUrl.matches(Regex("https://[A-Za-z0-9.-]+(:[0-9]+)?"))) { "dispatchApiUrl must be an HTTPS origin" }
 require(localFirebaseHost.matches(Regex("[A-Za-z0-9.-]+"))) { "Invalid emulator host" }
 
 android {
@@ -24,6 +33,7 @@ android {
         versionName = "1.0"
         buildConfigField("boolean", "FIREBASE_EMULATORS", localFirebase.toString())
         buildConfigField("String", "FIREBASE_EMULATOR_HOST", "\"$localFirebaseHost\"")
+        buildConfigField("String", "DISPATCH_API_URL", "\"$dispatchApiUrl\"")
         manifestPlaceholders["firebaseInitEnabled"] = (!localFirebase).toString()
         manifestPlaceholders["driverGuardLabel"] = if (localFirebase) "DriverGuard Local" else "@string/app_name"
 
@@ -51,6 +61,13 @@ android {
         buildConfig = true
     }
 }
+
+val requireOnlineConfig by tasks.registering {
+    doLast {
+        check(localFirebase || dispatchApiUrl.isNotEmpty()) { "Configure Render URL: run Configure-Online.ps1 or pass -PdispatchApiUrl=https://...onrender.com" }
+    }
+}
+tasks.named("preBuild").configure { dependsOn(requireOnlineConfig) }
 
 dependencies {
     implementation(platform(libs.androidx.compose.bom))

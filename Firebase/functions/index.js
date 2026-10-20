@@ -1,10 +1,11 @@
-import { initializeApp } from 'firebase-admin/app';
+import { initializeFirebase } from './runtime.js';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { validateDossier, requireApprovedDossier } from './dossiers.js';
+import { validQuantity } from './quantities.js';
 
-initializeApp();
+initializeFirebase();
 const db = getFirestore();
 const fail = (message, code = 'failed-precondition') => { throw new HttpsError(code, message); };
 const text = (value, label, max = 1000) => {
@@ -30,7 +31,7 @@ function available(schedule, period, except, now) {
  * Calendar documents serialize competing assignments without trusting dropdown filters.
  * operationId provides retry safety when a mobile response is lost after commit.
  */
-export const dispatchCommand = onCall({ region: 'asia-southeast1', maxInstances: 10 }, async request => {
+export async function handleDispatchCommand(request) {
   const uid = request.auth?.uid;
   if (!uid) fail('Cần đăng nhập', 'unauthenticated');
   const p = request.data || {}, action = text(p.action, 'thao tác', 50);
@@ -98,6 +99,7 @@ export const dispatchCommand = onCall({ region: 'asia-southeast1', maxInstances:
       dispatcher();
       const items = p.items;
       if (!Array.isArray(items) || !items.length || items.length > 30) fail('Cần từ 1 đến 30 mặt hàng');
+      for (const item of items) if (!validQuantity(item.quantity, item.unit)) fail(`Số lượng ${String(item.name || 'mặt hàng').slice(0, 100)} phải dương; kiện/thùng/pallet dùng số nguyên`, 'invalid-argument');
       const order = {
         customer: text(p.customer, 'khách hàng', 200), customerPhone: text(p.customerPhone, 'SĐT khách', 40),
         sender: text(p.sender, 'liên hệ lấy hàng', 200), senderPhone: text(p.senderPhone, 'SĐT liên hệ lấy hàng', 40),
@@ -153,7 +155,7 @@ export const dispatchCommand = onCall({ region: 'asia-southeast1', maxInstances:
       const driverRef = ref('drivers', p.driverId), d = await tx.get(driverRef);
       if (!d.exists) fail('Tài xế phải đăng ký tài khoản từ app trước');
       if (!['active', 'locked', 'rejected'].includes(p.status)) fail('Trạng thái không hợp lệ');
-      if (p.status === 'active') {
+      if (p.status === 'active' && d.data()?.accountStatus !== 'active') {
         requireApprovedDossier(d.data(), now);
         const account = await getAuth().getUser(p.driverId);
         if (!account.emailVerified) fail('Tài xế chưa xác minh email');
@@ -280,7 +282,7 @@ export const dispatchCommand = onCall({ region: 'asia-southeast1', maxInstances:
       const stop = trip.stops[index];
       if (!['full', 'partial', 'failed'].includes(p.outcome)) fail('Kết quả không hợp lệ');
       const quantities = p.quantities;
-      if (!Array.isArray(quantities) || quantities.length !== stop.items.length || quantities.some((q, i) => !Number.isFinite(q) || q < 0 || q > stop.items[i].quantity)) fail('Sai số lượng thực nhận/giao');
+      if (!Array.isArray(quantities) || quantities.length !== stop.items.length || quantities.some((q, i) => !validQuantity(q, stop.items[i].unit, true) || q > stop.items[i].quantity)) fail('Sai số lượng thực nhận/giao; kiện/thùng/pallet phải là số nguyên');
       const full = quantities.every((q, i) => q === stop.items[i].quantity), zero = quantities.every(q => q === 0);
       if ((p.outcome === 'full' && !full) || (p.outcome === 'failed' && !zero) || (p.outcome === 'partial' && (full || zero))) fail('Kết quả không khớp số lượng');
       // Delivery cannot exceed the quantity actually collected at pickup.
@@ -316,11 +318,12 @@ export const dispatchCommand = onCall({ region: 'asia-southeast1', maxInstances:
     result.id = tripRef.id;
     return saveReceipt();
   });
-});
+}
+export const dispatchCommand = onCall({ region: 'asia-southeast1', maxInstances: 10 }, handleDispatchCommand);
 
 /** Admin directory reads Auth identities, not email suffix guesses. Paginate to keep
  * personal contact data bounded; no passwords or identity documents are returned. */
-export const listCompanyAccounts = onCall({ region: 'asia-southeast1', maxInstances: 5 }, async request => {
+export async function handleListCompanyAccounts(request) {
   if (!request.auth) fail('Cần đăng nhập', 'unauthenticated');
   const staff = (await ref('staff', request.auth.uid).get()).data();
   if (!staff?.active || staff.role !== 'admin') fail('Chỉ quản trị được xem danh sách tài khoản', 'permission-denied');
@@ -336,4 +339,5 @@ export const listCompanyAccounts = onCall({ region: 'asia-southeast1', maxInstan
       staffRole: employee?.role || null, staffActive: employee?.active === true, driverStatus: driver?.accountStatus || null,
       createdAt: user.metadata.creationTime, lastSignInAt: user.metadata.lastSignInTime || null };
   }), nextPageToken: page.pageToken || null };
-});
+}
+export const listCompanyAccounts = onCall({ region: 'asia-southeast1', maxInstances: 5 }, handleListCompanyAccounts);

@@ -107,3 +107,22 @@ Nếu một cổng đang bị chương trình khác dùng, script báo lỗi; kh
 khác. Không chạy hai bộ máy chủ local cùng lúc. Khi khởi động lỗi, giữ log để xem nguyên nhân.
 
 Chi tiết phân quyền tài khoản và hồ sơ mới: [Hồ sơ tài xế](driver-profiles.md).
+
+## Đăng nhập và quên mật khẩu
+
+Tài khoản xuất hiện trong Firebase Console của project thật không tự tồn tại trong
+Auth emulator. Màn hình đăng nhập bản Local hiển thị rõ `demo-driverguard`.
+
+Web chỉ dành cho admin/dispatcher; tài xế dùng app. Provider Google và Email/Password
+là hai cách đăng nhập khác nhau; không mặc định mật khẩu Gmail là mật khẩu của ứng dụng.
+
+Web đã có **Quên mật khẩu?**, app Android có màn hình tương ứng. Ở Local,
+`sendPasswordResetEmail` tạo đường dẫn trong terminal chạy `Start-Local.ps1`, không gửi
+email thật. Người vận hành mở đường dẫn emulator in ra và đặt `newPassword` theo
+hướng dẫn, sau đó dùng mật khẩu mới đăng nhập cùng môi trường Local. Không đưa link
+reset/code vào báo cáo công khai. Đổi mật khẩu local không đổi mật khẩu Firebase thật.
+
+OTP SMS thật chưa triển khai: Firebase yêu cầu Blaze cho gửi SMS xác minh, trong khi
+phạm vi hiện tại giữ miễn phí. Emulator có thể mô phỏng mã OTP nhưng không gửi SMS.
+Nguồn: https://firebase.google.com/docs/auth/limits và
+https://firebase.google.com/docs/emulator-suite/connect_auth

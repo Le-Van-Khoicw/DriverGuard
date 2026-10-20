@@ -127,11 +127,8 @@ export const api = {
     const email = username.trim();
     if (!email.includes("@")) throw new Error("Nhập email tài khoản nhân viên được cấp");
     const result = await signInWithEmailAndPassword(auth, email, password);
-    const staff = (await getDoc(doc(db, "staff", result.user.uid))).data();
-    if (!staff?.active || !["admin", "dispatcher"].includes(staff.role)) {
-      await signOut(auth);
-      throw new Error("Tài khoản chưa được cấp quyền quản trị hoặc điều phối");
-    }
+    // App's realtime staff listener checks authorization and keeps its reason visible.
+    // Signing out here would remount Login and erase the "missing staff role" message.
     sessionStorage.setItem("driverguard_token", await result.user.getIdToken());
   },
 

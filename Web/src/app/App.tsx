@@ -4,19 +4,23 @@ import { doc, onSnapshot } from "firebase/firestore";
 import { Activity, AlertTriangle, ChevronRight, Eye, EyeOff, Gauge, LoaderCircle, LockKeyhole, ShieldCheck } from "lucide-react";
 import { auth, db } from "../api/firebase";
 import { api } from "../api/client";
+import { loginErrorMessage } from "../api/authErrors";
 import { Staff } from "../api/dispatch";
 import LogisticsPortal from "./LogisticsPortal";
+import PasswordResetForm from "./PasswordResetForm";
 
 function Badge({ children, tone = "gray" }: { children: React.ReactNode; tone?: "green" | "red" | "amber" | "blue" | "gray" }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 
 function Login({ onSuccess }: { onSuccess: () => void }) {
+  const local = import.meta.env.VITE_FIREBASE_EMULATORS === 'true';
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resetPassword, setResetPassword] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -26,7 +30,7 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
       await api.login(username.trim(), password);
       onSuccess();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Đăng nhập thất bại");
+      setError(loginErrorMessage(reason, local));
     } finally {
       setLoading(false);
     }
@@ -50,13 +54,15 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
         </div>
         <div className="login-form-panel">
           <div className="mobile-brand"><ShieldCheck /> DrowsyGuard</div>
-          <div className="login-heading"><p>CỔNG QUẢN TRỊ</p><h2>Đăng nhập hệ thống</h2><span>Sử dụng tài khoản quản trị được cấp bởi hệ thống.</span></div>
-          <form onSubmit={submit} className="login-form">
-            <label>Email nhân viên<input autoFocus value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Email nhân viên" required /></label>
+          <div className="login-heading"><p>CỔNG QUẢN TRỊ</p><h2>Đăng nhập hệ thống</h2><span>Sử dụng tài khoản quản trị hoặc điều phối đã được cấp quyền.</span></div>
+          {local && <div className="login-environment"><strong>Bản LOCAL · demo-driverguard</strong><p>Tài khoản trên Firebase thật không tự đăng nhập được vào bản này. Dùng tài khoản local đã tạo; tài khoản tài xế đăng nhập trên app.</p><small>Quản lý demo: admin@driverguard.test<br />Điều phối demo: dieuphoi@driverguard.test</small></div>}
+          {resetPassword ? <PasswordResetForm initialEmail={username} back={() => setResetPassword(false)} /> : <form onSubmit={submit} className="login-form">
+            <label>Email nhân viên<input autoFocus type="email" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Email nhân viên" required /></label>
             <label>Mật khẩu<div className="password-field"><input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="Nhập mật khẩu" required /><button type="button" aria-label="Hiện hoặc ẩn mật khẩu" onClick={() => setShowPassword((v) => !v)}>{showPassword ? <EyeOff /> : <Eye />}</button></div></label>
             {error && <div className="form-error"><AlertTriangle />{error}</div>}
             <button className="primary-button login-button" disabled={loading}>{loading ? <><LoaderCircle className="spin" />Đang xác thực</> : <>Đăng nhập<ChevronRight /></>}</button>
-          </form>
+            <button type="button" className="text-button forgot-password-link" disabled={loading} onClick={() => { setError(''); setResetPassword(true); }}>Quên mật khẩu?</button>
+          </form>}
           <div className="login-note"><LockKeyhole /> Dành cho tài khoản quản trị và điều phối viên được cấp quyền.</div>
         </div>
       </section>
@@ -78,7 +84,7 @@ export default function App() {
       unsubscribeStaff = onSnapshot(doc(db, "staff", user.uid), snapshot => {
         const data = snapshot.data();
         if (data?.active === true && ["admin", "dispatcher"].includes(data.role)) setStaff({ ...data, uid: user.uid } as Staff);
-        else { setStaff(null); setAccessError("Tài khoản chưa có quyền nhân viên đang hoạt động. Quản lý cần cấp quyền trong hệ thống."); }
+        else { setStaff(null); setAccessError("Đăng nhập thành công, nhưng tài khoản chưa có quyền admin/điều phối đang hoạt động. Nếu đây là tài khoản tài xế, hãy dùng app Android; nhân viên cần được quản lý cấp quyền theo UID."); }
         setChecking(false);
       }, error => { setStaff(null); setAccessError(error.message); setChecking(false); });
     });

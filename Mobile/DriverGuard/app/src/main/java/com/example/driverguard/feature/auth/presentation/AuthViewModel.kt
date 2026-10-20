@@ -335,10 +335,14 @@ class AuthViewModel(
                 "Email này đã được sử dụng cho một tài khoản khác."
 
             exception is FirebaseAuthInvalidCredentialsException || rawMessage.contains("invalid credential") || rawMessage.contains("wrong-password") || rawMessage.contains("invalid-email") || rawMessage.contains("badly formatted") ->
-                "Email hoặc mật khẩu không chính xác."
+                if (com.example.driverguard.BuildConfig.FIREBASE_EMULATORS)
+                    "Email hoặc mật khẩu không khớp tài khoản LOCAL. Tài khoản trên Firebase thật chưa nằm trong môi trường demo-driverguard."
+                else "Email hoặc mật khẩu không chính xác."
 
             exception is FirebaseNetworkException || rawMessage.contains("network") || rawMessage.contains("timeout") || rawMessage.contains("unreachable") ->
-                "Lỗi kết nối mạng. Vui lòng kiểm tra lại đường truyền Internet."
+                if (com.example.driverguard.BuildConfig.FIREBASE_EMULATORS)
+                    "Không kết nối được máy chủ local. Kiểm tra máy tính đang chạy Start-Local.ps1 và kết nối máy ảo/USB."
+                else "Lỗi kết nối mạng. Vui lòng kiểm tra lại đường truyền Internet."
 
             rawMessage.contains("canceled") || rawMessage.contains("cancelled") || rawMessage.contains("cancel") ->
                 "Bạn đã hủy quá trình đăng nhập Google."

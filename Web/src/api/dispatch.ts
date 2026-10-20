@@ -1,6 +1,6 @@
-import { getFunctions, httpsCallable, connectFunctionsEmulator } from 'firebase/functions';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { app, db } from './firebase';
+import { db } from './firebase';
+import { businessCall } from './businessFunctions';
 
 export type Staff = { uid: string; role: 'admin' | 'dispatcher'; displayName: string; employeeCode: string; active: boolean; phone?: string; email?: string };
 export type Item = { name: string; quantity: number; unit: string };
@@ -12,11 +12,8 @@ export type Driver = { id: string; displayName: string; phone: string; email?: s
 export type Leave = { id: string; driverId: string; start: number; end: number; reason: string; status: string; affectedTripIds?: string[] };
 export type Report = { id: string; userId: string; dispatchTripId?: string; assignmentVersion?: number; startTime: number; safetyScore: number | null; hasSufficientData: boolean; measurementCoverage: number; totalAlerts: number; aiDiagnosis: string };
 export const labels: Record<string, string> = { ready: 'Sẵn sàng', assigned: 'Đã giao chuyến', accepted: 'Đã nhận', in_progress: 'Đang chạy', handover_pending: 'Chờ nhận bàn giao', declined: 'Từ chối', needs_reassignment: 'Cần giao lại', completed: 'Hoàn thành', completed_issues: 'Kết thúc có vấn đề', cancelled: 'Đã hủy', delivered: 'Đã giao đủ', delivery_issue: 'Giao có vấn đề', pending: 'Chờ xử lý', approved: 'Đã duyệt', rejected: 'Từ chối', active: 'Hoạt động', locked: 'Đã khóa', full: 'Đủ', partial: 'Thiếu', failed: 'Thất bại', available: 'Sẵn sàng', maintenance: 'Bảo trì', inactive: 'Ngừng sử dụng' };
-const functions = getFunctions(app, 'asia-southeast1');
-if (import.meta.env.VITE_FIREBASE_EMULATORS === 'true') connectFunctionsEmulator(functions, '127.0.0.1', 5001);
-const callable = httpsCallable<Record<string, unknown>, { id: string }>(functions, 'dispatchCommand');
 export async function command(action: string, data: Record<string, unknown>, operationId = crypto.randomUUID()) {
-  return (await callable({ ...data, action, operationId })).data;
+  return businessCall<Record<string, unknown>, { id: string }>('dispatchCommand', { ...data, action, operationId });
 }
 export function watch<T>(name: string, update: (rows: T[]) => void, error: (e: Error) => void) {
   return onSnapshot(collection(db, name), snapshot => update(snapshot.docs.map(d => ({ ...d.data(), id: d.id }) as T)), error);
@@ -26,7 +23,7 @@ export type Alert = { id: string; userId: string; dispatchTripId?: string; monit
 
 export type CompanyAccount = { uid: string; email: string; displayName: string; emailVerified: boolean; disabled: boolean; providers: string[]; staffRole: string | null; staffActive: boolean; driverStatus: string | null; createdAt: string; lastSignInAt: string | null };
 export async function listCompanyAccounts(pageToken?: string) {
-  return (await httpsCallable<{ pageToken?: string }, { accounts: CompanyAccount[]; nextPageToken: string | null }>(functions, 'listCompanyAccounts')({ ...(pageToken ? { pageToken } : {}) })).data;
+  return businessCall<{ pageToken?: string }, { accounts: CompanyAccount[]; nextPageToken: string | null }>('listCompanyAccounts', { ...(pageToken ? { pageToken } : {}) });
 }
 export type DriverDossier = {
   driverId: string; revision: number; status: string; fullName: string; phone: string; birthDate: string; address: string;

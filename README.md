@@ -27,7 +27,20 @@ docs/                     Nghiệp vụ, công thức điểm, hướng dẫn ch
 Nguồn dữ liệu ứng dụng là Firebase Auth + Firestore. `Backend/` FastAPI/MySQL và
 `Edge/` là phần kiến trúc cũ/thử nghiệm, không phải máy chủ của luồng vận tải mới.
 
-## Chạy local miễn phí (phương án khóa luận)
+## Chạy thật trên mạng (phương án đang triển khai)
+
+Web dùng Firebase Hosting; backend Node dùng Render; Auth và Firestore dùng project
+thật `driverguard-854e5`. Giấy tờ lưu Supabase Storage Private, không cần Firebase Storage/Blaze.
+Xem [hướng dẫn triển khai online](docs/deploy-online.md) và `render.yaml`.
+Backend cần URL và secret trên Render trước khi web/APK online dùng được.
+
+```powershell
+.\Configure-Online.ps1 -ApiUrl https://<ten-api>.onrender.com
+.\Start-Online.ps1
+.\Build-OnlineAndroid.ps1
+```
+
+## Bộ emulator tùy chọn, tách biệt Firebase thật
 
 Đã cấu hình máy chủ Firebase Emulator, web và APK Local riêng. Chạy:
 
@@ -47,8 +60,8 @@ Dừng bằng `Stop-Local.ps1` để xuất dữ liệu trước khi tắt. Khô
 
 Web: `cd Web`, `npm ci`, `npm run dev`.
 Android: mở `Mobile/DriverGuard` bằng Android Studio.
-Luồng vận tải cần máy chủ `dispatchCommand`: xem hướng dẫn emulator trước khi chạy.
-Chưa triển khai functions/rules mới lên Firebase thật, chưa nghiệm thu xuyên suốt.
+Luồng vận tải cần backend online: xem `docs/deploy-online.md` trước khi chạy.
+Chưa có URL Render thực tế; chưa nghiệm thu xuyên suốt trên cloud.
 
 ## Phần AI
 

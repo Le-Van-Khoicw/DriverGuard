@@ -9,6 +9,9 @@ local.properties
 # Signing keys and secrets
 *.jks
 *.keystore
+*service-account*.json
+*adminsdk*.json
+online.properties
 .env
 .env.local
 .env.*.local
@@ -30,6 +33,7 @@ instance/
 # Web
 node_modules/
 dist/
+.compile-output-*/
 
 # Local uploads and databases
 uploads/

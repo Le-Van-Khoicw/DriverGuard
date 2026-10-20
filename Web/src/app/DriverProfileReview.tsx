@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { getBlob, ref } from 'firebase/storage';
-import { db, storage } from '../api/firebase';
+import { db } from '../api/firebase';
+import { readDocument } from '../api/documentFiles';
 import { Driver, DriverDossier, FleetVehicle, qualificationLabel } from '../api/dispatch';
 
 const documentNames: Record<string, string> = { identity_front: 'Căn cước — mặt trước', identity_back: 'Căn cước — mặt sau', license_front: 'GPLX — mặt trước', license_back: 'GPLX — mặt sau', health: 'Giấy khám / xác nhận sức khỏe' };
@@ -12,28 +12,36 @@ export default function DriverProfileReview({ driver, admin, busy, error, review
   const [dossier, setDossier] = useState<DriverDossier | null>(null), [loading, setLoading] = useState(admin), [readError, setReadError] = useState('');
   const [previews, setPreviews] = useState<Record<string, { url: string; pdf: boolean }>>({});
   const previewUrls = useRef<string[]>([]);
+  const previewVersion = useRef(0);
   const [downloading, setDownloading] = useState('');
   const [vehicleIds, setVehicleIds] = useState<string[]>([]);
   const [verified, setVerified] = useState(false), [note, setNote] = useState('');
   useEffect(() => {
     if (!admin) return;
+    setLoading(true); setDossier(null); setReadError('');
     return onSnapshot(doc(db, 'driverDossiers', driver.id), snapshot => {
       setDossier(snapshot.exists() ? snapshot.data() as DriverDossier : null); setLoading(false); setVerified(false); setVehicleIds([]); setNote('');
     }, e => { setReadError(e.message); setLoading(false); });
   }, [driver.id, admin]);
-  useEffect(() => () => previewUrls.current.forEach(url => URL.revokeObjectURL(url)), []);
+  useEffect(() => {
+    previewVersion.current += 1;
+    previewUrls.current.forEach(url => URL.revokeObjectURL(url)); previewUrls.current = [];
+    setPreviews({}); setDownloading('');
+    return () => { previewVersion.current += 1; previewUrls.current.forEach(url => URL.revokeObjectURL(url)); previewUrls.current = []; };
+  }, [driver.id, dossier?.revision]);
   async function preview(document: DriverDossier['documents'][number]) {
+    const version = previewVersion.current;
     setDownloading(document.kind); setReadError('');
-    try { const blob = await getBlob(ref(storage, document.path), 5 * 1024 * 1024); const url = URL.createObjectURL(blob); previewUrls.current.push(url); setPreviews(v => ({ ...v, [document.kind]: { url, pdf: document.contentType === 'application/pdf' } })); }
-    catch (e) { setReadError(e instanceof Error ? e.message : 'Không mở được tệp'); }
-    finally { setDownloading(''); }
+    try { const blob = await readDocument(document.path); if (version !== previewVersion.current) return; const url = URL.createObjectURL(blob); previewUrls.current.push(url); setPreviews(v => ({ ...v, [document.kind]: { url, pdf: document.contentType === 'application/pdf' } })); }
+    catch (e) { if (version === previewVersion.current) setReadError(e instanceof Error ? e.message : 'Không mở được tệp'); }
+    finally { if (version === previewVersion.current) setDownloading(''); }
   }
   return <div className="driver-profile-review">
     <div className="profile-summary"><div className="profile-initial">{driver.displayName?.charAt(0).toUpperCase() || 'T'}</div><div><h3>{driver.displayName}</h3><p>{driver.employeeCode || 'Chưa cấp mã'} · {driver.email || 'Chưa có email'} · {driver.phone || 'Chưa có số điện thoại'}</p><span className="log-status">{qualificationLabel(driver)}</span></div></div>
     <p className="account-help">UID: {driver.id} · Trạng thái tài khoản: {driver.accountStatus}. Duyệt hồ sơ và kích hoạt tài khoản là hai bước riêng.</p>
     {!admin && <p>Điều phối được xem trạng thái và hạn hồ sơ. Ảnh giấy tờ, số định danh và thông tin sức khỏe chỉ dành cho chính tài xế và quản trị.</p>}
     {!admin && <p>GPLX: {driver.licenseClass || 'Chưa có'} · Hạn GPLX: {driver.licenseExpiresAt ? new Date(driver.licenseExpiresAt).toLocaleDateString('vi-VN') : '—'} · Hạn hồ sơ sức khỏe: {driver.healthExpiresAt ? new Date(driver.healthExpiresAt).toLocaleDateString('vi-VN') : '—'}</p>}
-    {loading && <p>Đang đọc hồ sơ…</p>}{admin && !loading && !dossier && <p>Tài xế chưa nộp hồ sơ từ ứng dụng. Nhắc tài xế mở Hồ sơ nghề nghiệp để hoàn thiện.</p>}
+    {loading && <p>Đang đọc hồ sơ…</p>}{admin && !loading && !dossier && <p>Chưa có hồ sơ của {driver.displayName} để xét duyệt. Quản lý đang có quyền duyệt, nhưng tài xế cần đăng nhập app → Cài đặt → Hồ sơ → Hồ sơ nghề nghiệp, nhập thông tin, tải giấy tờ và bấm Nộp hồ sơ trước.</p>}
     {(readError || error) && <p role="alert" className="log-error">{readError || error}</p>}
     {admin && dossier && <>
       <dl className="profile-details">{[['Họ tên theo giấy tờ', dossier.fullName], ['Điện thoại', dossier.phone], ['Ngày sinh', dossier.birthDate], ['Địa chỉ', dossier.address], ['Số căn cước', dossier.identityNumber], ['GPLX / hạng', `${dossier.licenseNumber} · ${dossier.licenseClass}`], ['GPLX: ngày cấp / hết hạn', `${dossier.licenseIssuedDate} → ${dossier.licenseExpiresDate}`], ['Sức khỏe: ngày khám / hạn quản lý', `${dossier.healthCheckedDate} → ${dossier.healthExpiresDate}`], ['Liên hệ khẩn cấp', `${dossier.emergencyName} · ${dossier.emergencyPhone}`], ['Lần nộp', `v${dossier.revision} · ${new Date(dossier.submittedAt).toLocaleString('vi-VN')}`]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>

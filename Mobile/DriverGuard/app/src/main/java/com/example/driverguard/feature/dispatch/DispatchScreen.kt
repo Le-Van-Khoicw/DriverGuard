@@ -87,7 +87,11 @@ fun DispatchScreen(viewModel: DispatchViewModel, onMonitor: (AssignedTrip) -> Un
         val numbers = quantities.map { it.toDoubleOrNull() }
         val pickup = trip.stops.find { it.kind == "pickup" && it.id.substringBefore(':') == stop.id.substringBefore(':') }
         val maximum = stop.items.mapIndexed { i, item -> if (stop.kind == "delivery") pickup?.quantities?.getOrNull(i) ?: 0.0 else item.quantity }
-        val valid = numbers.all { it != null && it.isFinite() && it >= 0 } && numbers.indices.all { (numbers[it] ?: 0.0) <= maximum[it] }
+        val measuredUnits = setOf("kg", "tấn", "tan", "lít", "lit", "l", "m", "m²", "m2", "m³", "m3")
+        val valid = numbers.all { it != null && it.isFinite() && it >= 0 && it <= 1_000_000_000 } && numbers.indices.all {
+            val quantity = numbers[it] ?: return@all false
+            quantity <= maximum[it] && (stop.items[it].unit.trim().lowercase(Locale.ROOT) in measuredUnits || quantity % 1.0 == 0.0)
+        }
         val full = numbers.indices.all { numbers[it] == stop.items[it].quantity }
         val zero = numbers.all { it == 0.0 }
         val consistent = when (outcome) { "full" -> full; "failed" -> zero; else -> !full && !zero }
@@ -99,7 +103,7 @@ fun DispatchScreen(viewModel: DispatchViewModel, onMonitor: (AssignedTrip) -> Un
                 stop.items.forEachIndexed { i, item -> OutlinedTextField(value = quantities[i], onValueChange = { v -> quantities = quantities.mapIndexed { j, old -> if (i == j) v else old } }, label = { Text("${item.name} (${item.unit}), tối đa ${maximum[i]}") }) }
                 OutlinedTextField(value = contact, onValueChange = { contact = it }, label = { Text("Người giao/nhận thực tế") })
                 OutlinedTextField(value = note, onValueChange = { note = it }, label = { Text("Lý do nếu thiếu/thất bại") })
-                Text("Điền đúng số lượng thực tế. GPS đến nơi không tự xác nhận giao hàng.")
+                Text("Kiện, thùng, pallet dùng số nguyên. Kg, tấn, lít cho phép số lẻ. GPS đến nơi không tự xác nhận giao hàng.")
             }
         }, confirmButton = { TextButton(enabled = valid && consistent && contact.isNotBlank() && (outcome == "full" || note.isNotBlank()), onClick = {
             viewModel.recordStop(trip, stop, outcome, numbers.map { it!! }, contact, note); editingStop = null
