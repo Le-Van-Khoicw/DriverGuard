@@ -3,7 +3,8 @@ $configPath = Join-Path $PSScriptRoot 'Web\.env.production.local'
 if (-not (Test-Path -LiteralPath $configPath)) { throw 'Chạy Configure-Online.ps1 -ApiUrl https://...onrender.com trước.' }
 Push-Location (Join-Path $PSScriptRoot 'Web')
 try {
-    & npm.cmd run build
+    # Firebase CLI requires Hosting assets to stay inside its project directory.
+    & npm.cmd run build -- --outDir ../Firebase/hosting-dist
     if ($LASTEXITCODE -ne 0) { throw 'Build web thất bại; chưa triển khai.' }
 } finally { Pop-Location }
 Push-Location (Join-Path $PSScriptRoot 'Firebase')

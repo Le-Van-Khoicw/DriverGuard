@@ -176,6 +176,14 @@ Render Environment. Thêm domain đó vào các cấu hình origin ở trên.
 
 ## Trạng thái triển khai
 
+Ngày 20/10/2026: backend `https://driverguard-1.onrender.com/health` phản hồi online;
+giao diện đã triển khai tại `https://driverguard-854e5.web.app` và trả đúng bundle mới.
+Render cho phép CORS từ origin giao diện này. APK online đã dựng với URL backend thật.
+Đây là xác nhận HTTP/triển khai, chưa nghiệm thu đăng nhập, phân quyền hay upload giấy tờ.
+Đường dẫn `/` của backend là API và trả NOT_FOUND; người dùng mở URL Firebase Hosting.
+Script deploy tạo bundle trong `Firebase/hosting-dist` vì CLI yêu cầu tệp nằm trong
+thư mục project Firebase; thư mục generated này được bỏ qua trong Git.
+
 Code hỗ trợ chạy thật không có nghĩa là dịch vụ đã được triển khai. Phải có URL Render,
 secret credentials trên Render, Supabase Private, Firestore Rules và quyền nhân viên thật. Chưa có các thông
 tin đó thì không tạo APK có URL giả và không tuyên bố hệ thống online đã hoạt động.

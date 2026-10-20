@@ -33,6 +33,7 @@ instance/
 # Web
 node_modules/
 dist/
+Firebase/hosting-dist/
 .compile-output-*/
 
 # Local uploads and databases

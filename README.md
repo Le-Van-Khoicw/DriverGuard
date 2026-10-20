@@ -61,7 +61,9 @@ Dừng bằng `Stop-Local.ps1` để xuất dữ liệu trước khi tắt. Khô
 Web: `cd Web`, `npm ci`, `npm run dev`.
 Android: mở `Mobile/DriverGuard` bằng Android Studio.
 Luồng vận tải cần backend online: xem `docs/deploy-online.md` trước khi chạy.
-Chưa có URL Render thực tế; chưa nghiệm thu xuyên suốt trên cloud.
+Web đã triển khai tại `https://driverguard-854e5.web.app`; backend tại
+`https://driverguard-1.onrender.com`, `/health` phản hồi online. Chưa nghiệm thu
+xuyên suốt đăng nhập, nghiệp vụ và upload Supabase trên cloud.
 
 ## Phần AI
 

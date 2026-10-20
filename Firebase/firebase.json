@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "../Web/dist",
+    "public": "hosting-dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [{ "source": "**", "destination": "/index.html" }],
     "headers": [
