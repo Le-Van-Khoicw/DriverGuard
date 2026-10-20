@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { Activity, AlertTriangle, ChevronRight, Eye, EyeOff, Gauge, LoaderCircle, LockKeyhole, ShieldCheck } from "lucide-react";
 import { auth, db } from "../api/firebase";
@@ -35,6 +35,18 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
       setLoading(false);
     }
   }
+  async function loginGoogle() {
+    if (loading) return;
+    setLoading(true); setError('');
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(auth, provider);
+      // The root Auth/Firestore listener checks staff privileges for the same UID.
+      onSuccess();
+    } catch (reason) { setError(loginErrorMessage(reason, local)); }
+    finally { setLoading(false); }
+  }
 
   return (
     <main className="login-page">
@@ -61,6 +73,7 @@ function Login({ onSuccess }: { onSuccess: () => void }) {
             <label>Mật khẩu<div className="password-field"><input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="Nhập mật khẩu" required /><button type="button" aria-label="Hiện hoặc ẩn mật khẩu" onClick={() => setShowPassword((v) => !v)}>{showPassword ? <EyeOff /> : <Eye />}</button></div></label>
             {error && <div className="form-error"><AlertTriangle />{error}</div>}
             <button className="primary-button login-button" disabled={loading}>{loading ? <><LoaderCircle className="spin" />Đang xác thực</> : <>Đăng nhập<ChevronRight /></>}</button>
+            {!local && <><button type="button" className="primary-button login-button" disabled={loading} onClick={() => void loginGoogle()}>Đăng nhập bằng Google</button><small>Tài khoản đã đăng ký bằng Google dùng nút Google. Ô mật khẩu dành cho tài khoản đã thiết lập mật khẩu trên ứng dụng.</small></>}
             <button type="button" className="text-button forgot-password-link" disabled={loading} onClick={() => { setError(''); setResetPassword(true); }}>Quên mật khẩu?</button>
           </form>}
           <div className="login-note"><LockKeyhole /> Dành cho tài khoản quản trị và điều phối viên được cấp quyền.</div>

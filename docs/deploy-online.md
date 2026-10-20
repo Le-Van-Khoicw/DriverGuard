@@ -110,6 +110,12 @@ chỉ phục vụ tệp Firebase cũ hoặc emulator.
 
 ## 5. Cấp quản trị đầu tiên
 
+Web hỗ trợ nút **Đăng nhập bằng Google** cho tài khoản đã liên kết Google; không dùng
+mật khẩu Gmail trong ô Email/Mật khẩu. Google xác thực danh tính, Firestore `staff/{uid}`
+quyết định quyền web. Admin mở **Tài khoản đăng ký → Cấp/sửa quyền web** để cấp admin/
+dispatcher theo UID; hồ sơ/trạng thái tài xế quản lý riêng tại **Tài xế**. Không tự cấp
+role khi người dùng đăng nhập Google lần đầu.
+
 Nếu Firestore thật đã có quản trị đang hoạt động trong `staff/{uid}`, dùng tài khoản đó.
 Nếu chưa có, chọn tài khoản Auth thật thuộc người quản lý và xác minh email. Trong
 terminal tin cậy tại `Firebase/functions`, cấu hình credentials như `.env.example`, rồi:
@@ -183,6 +189,10 @@ Render cho phép CORS từ origin giao diện này. APK online đã dựng với
 Đường dẫn `/` của backend là API và trả NOT_FOUND; người dùng mở URL Firebase Hosting.
 Script deploy tạo bundle trong `Firebase/hosting-dist` vì CLI yêu cầu tệp nằm trong
 thư mục project Firebase; thư mục generated này được bỏ qua trong Git.
+Firestore Rules/indexes mới đã triển khai. Đã cấp admin đầu tiên cho UID thật đã
+đối chiếu với Authentication theo xác nhận của chủ tài khoản; không thay mật khẩu
+hoặc xóa hồ sơ tài xế. Nút Google đã triển khai trên Hosting. Chưa thao tác OAuth
+thay người dùng hoặc nghiệm thu luồng nghiệp vụ xuyên suốt.
 
 Code hỗ trợ chạy thật không có nghĩa là dịch vụ đã được triển khai. Phải có URL Render,
 secret credentials trên Render, Supabase Private, Firestore Rules và quyền nhân viên thật. Chưa có các thông
