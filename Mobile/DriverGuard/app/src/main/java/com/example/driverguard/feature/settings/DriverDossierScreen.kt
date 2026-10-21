@@ -22,6 +22,9 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && uploadKind.isNotBlank()) viewModel.upload(uploadKind, uri)
     }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null && uploadKind.isNotBlank()) viewModel.upload(uploadKind, uri)
+    }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         TextButton(onClick = onBack, enabled = !state.busy) { Text("← Quay lại") }
         Text("Hồ sơ nghề nghiệp tài xế", style = MaterialTheme.typography.headlineSmall)
@@ -58,13 +61,31 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
                 Text("GPLX bắt buộc (${state.documents.count { it.kind in requiredDossierDocuments }}/2)", style = MaterialTheme.typography.titleMedium)
                 Text("Hai mặt GPLX cần có để nộp. Tệp căn cước và sức khỏe chỉ đính kèm khi công ty yêu cầu.", style = MaterialTheme.typography.bodySmall)
                 Text("JPG, PNG hoặc PDF, tối đa 5 MB/tệp. Cần mạng để tải tệp và nộp hồ sơ. Chỉ bạn và quản trị được xem giấy tờ.", style = MaterialTheme.typography.bodySmall)
+                // Keep feedback beside the pickers; the page header can be far above the current scroll position.
+                if (state.busy) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    Text("Đang xử lý, vui lòng chờ. Lần kết nối đầu tiên có thể lâu hơn.")
+                }
+                state.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 dossierDocumentNames.forEach { (kind, name) ->
                     Text(name)
                     state.documents.find { it.kind == kind }?.let {
                         Text("Đã tải: ${it.name}", style = MaterialTheme.typography.bodySmall)
                         TextButton(onClick = { viewModel.removeDocument(kind) }, enabled = !state.busy && !state.loading) { Text("Bỏ tệp khỏi bản nháp") }
                     }
-                    OutlinedButton(onClick = { uploadKind = kind; picker.launch(arrayOf("image/jpeg", "image/png", "application/pdf")) }, enabled = !state.busy && !state.loading) { Text(if (state.documents.any { it.kind == kind }) "Chọn tệp thay thế" else "Chọn tệp") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = {
+                            uploadKind = kind
+                            runCatching { photoPicker.launch("image/*") }
+                                .onFailure { viewModel.fileSelectionError("Không mở được thư viện ảnh. Thử nút Chọn tệp.") }
+                        }, enabled = !state.busy && !state.loading) { Text("Chọn ảnh") }
+                        OutlinedButton(onClick = {
+                            uploadKind = kind
+                            runCatching { picker.launch(arrayOf("image/jpeg", "image/png", "application/pdf")) }
+                                .onFailure { viewModel.fileSelectionError("Không mở được trình chọn tệp trên điện thoại.") }
+                        }, enabled = !state.busy && !state.loading) { Text(if (state.documents.any { it.kind == kind }) "Thay tệp" else "Chọn tệp / PDF") }
+                    }
                 }
             }
         }

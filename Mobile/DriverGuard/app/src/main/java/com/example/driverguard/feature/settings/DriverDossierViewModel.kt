@@ -112,14 +112,15 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
         _state.value = _state.value.copy(documents = _state.value.documents.filterNot { it.kind == kind }, dirty = true, error = null, message = "Đã bỏ tệp khỏi bản nháp. Hồ sơ đã nộp vẫn giữ cho đến khi nộp lại.")
         runCatching { saveDraft() }.onFailure { _state.value = _state.value.copy(error = it.message) }
     }
+    fun fileSelectionError(message: String) {
+        _state.value = _state.value.copy(error = message, message = null)
+    }
     fun upload(kind: String, uri: Uri) {
         if (!stillOwner() || _state.value.busy || !dossierDocumentNames.containsKey(kind)) return
         _state.value = _state.value.copy(busy = true, error = null, message = "Đang tải giấy tờ…")
         viewModelScope.launch {
             try {
                 val resolver = getApplication<Application>().contentResolver
-                val mime = resolver.getType(uri) ?: error("Không xác định được loại tệp")
-                check(mime in listOf("image/jpeg", "image/png", "application/pdf")) { "Chọn JPG, PNG hoặc PDF" }
                 val (bytes, name) = withContext(Dispatchers.IO) {
                     var fileName = "giay-to"
                     resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor -> if (cursor.moveToFirst()) fileName = cursor.getString(0) ?: fileName }
@@ -130,6 +131,14 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
                     } ?: error("Không mở được tệp")
                     check(data.isNotEmpty()) { "Tệp trống" }
                     data to fileName.take(180)
+                }
+                // Some Android file providers return null or application/octet-stream for valid photos.
+                // Detect the actual file signature, matching the server's validation rather than its name.
+                val mime = when {
+                    bytes.size >= 3 && bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte() -> "image/jpeg"
+                    bytes.size >= 8 && bytes.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)) -> "image/png"
+                    bytes.size >= 5 && bytes.copyOfRange(0, 5).contentEquals("%PDF-".toByteArray(Charsets.US_ASCII)) -> "application/pdf"
+                    else -> error("Tệp không phải JPG, PNG hoặc PDF. Nếu ảnh HEIC/WebP, hãy xuất sang JPG trước.")
                 }
                 check(stillOwner()) { "Tài khoản đã thay đổi" }
                 val path = withTimeout(190_000) { DocumentFiles.upload(uid, kind, mime, bytes) }
