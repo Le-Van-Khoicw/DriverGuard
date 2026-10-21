@@ -49,7 +49,7 @@ const server = createServer(async (req, res) => {
   }
   const url = new URL(req.url, 'http://server');
   const pathname = url.pathname;
-  if (req.method === 'GET' && pathname === '/health') return send(res, 200, { status: 'ok', projectId: process.env.FIREBASE_PROJECT_ID || 'driverguard-854e5', mode: 'online', features: { physicalDossiers: true } });
+  if (req.method === 'GET' && pathname === '/health') return send(res, 200, { status: 'ok', projectId: process.env.FIREBASE_PROJECT_ID || 'driverguard-854e5', mode: 'online', features: { physicalDossiers: true, automaticStaffCodes: true } });
   const handler = handlers[pathname];
   const documentRoute = pathname === '/driver-documents' && ['GET', 'POST'].includes(req.method);
   if (!documentRoute && (!handler || req.method !== 'POST')) return send(res, 404, { error: { status: 'NOT_FOUND', message: 'Endpoint not found' } });

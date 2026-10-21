@@ -18,6 +18,8 @@ const interval = p => { const start = positive(p.start, 'Giờ bắt đầu'), e
 const overlaps = (a, b) => a.start < b.end && b.start < a.end;
 const ref = (collection, id) => db.collection(collection).doc(identifier(id));
 const terminal = status => ['completed', 'completed_issues', 'cancelled'].includes(status);
+// Auth is the source of the suggested staff name, never a name sent by the browser.
+const accountName = account => String(account.providerData.find(p => p.providerId === 'google.com')?.displayName || account.displayName || account.email?.split('@')[0] || account.uid).trim().slice(0, 200);
 const clean = schedule => ({ reservations: schedule?.reservations || {}, leaves: schedule?.leaves || {} });
 function available(schedule, period, except, now) {
   for (const [id, r] of Object.entries(schedule.reservations)) {
@@ -142,8 +144,27 @@ export async function handleDispatchCommand(request) {
       if (!['admin', 'dispatcher'].includes(p.role) || typeof p.active !== 'boolean') fail('Sai vai trò hoặc trạng thái');
       // Grant only an existing Firebase Auth identity; never invent a usable login from a profile document.
       const account = await getAuth().getUser(targetId).catch(() => fail('Không tìm thấy UID tài khoản Firebase Auth'));
-      tx.set(ref('staff', targetId), { role: p.role, active: p.active, displayName: text(p.displayName, 'tên nhân viên', 200),
-        employeeCode: text(p.employeeCode, 'mã nhân viên', 40), email: account.email || '', phone: String(p.phone || '').slice(0, 30), updatedBy: uid, updatedAt: now });
+      const targetRef = ref('staff', targetId), previous = (await tx.get(targetRef)).data();
+      let employeeCode = previous?.employeeCode;
+      if (!employeeCode) {
+        const counterRef = ref('systemCounters', 'staffEmployeeCode');
+        const counter = await tx.get(counterRef);
+        // Include legacy manually assigned codes; count()+1 could reuse a deleted or existing code.
+        const employees = await tx.get(db.collection('staff'));
+        let sequence = Number(counter.data()?.lastValue) || 0;
+        for (const employee of employees.docs) {
+          const match = /^NV(\d+)$/i.exec(String(employee.data().employeeCode || ''));
+          if (match) sequence = Math.max(sequence, Number(match[1]));
+        }
+        if (!Number.isSafeInteger(sequence) || sequence >= 999999999) fail('Bộ đếm mã nhân viên vượt giới hạn');
+        employeeCode = `NV${String(sequence + 1).padStart(3, '0')}`;
+        // Every allocation writes this document, so competing transactions retry before assigning a code.
+        tx.set(counterRef, { lastValue: sequence + 1, updatedAt: now });
+      }
+      tx.set(targetRef, { role: p.role, active: p.active, displayName: accountName(account),
+        employeeCode, email: account.email || '', phone: String(p.phone || '').slice(0, 30),
+        createdAt: previous?.createdAt || now, updatedBy: uid, updatedAt: now }, { merge: true });
+      result.id = targetId;
       return saveReceipt();
     }
     if (action === 'reviewAlert') {
@@ -358,6 +379,7 @@ export async function handleListCompanyAccounts(request) {
   return { accounts: page.users.map((user, i) => {
     const employee = documents[i * 2].data(), driver = documents[i * 2 + 1].data();
     return { uid: user.uid, email: user.email || '', displayName: employee?.displayName || driver?.displayName || user.displayName || '',
+      authDisplayName: accountName(user), employeeCode: employee?.employeeCode || '', staffPhone: employee?.phone || '',
       emailVerified: user.emailVerified, disabled: user.disabled, providers: user.providerData.map(p => p.providerId),
       staffRole: employee?.role || null, staffActive: employee?.active === true, driverStatus: driver?.accountStatus || null,
       createdAt: user.metadata.creationTime, lastSignInAt: user.metadata.lastSignInTime || null };

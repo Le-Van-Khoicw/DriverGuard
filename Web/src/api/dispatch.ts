@@ -21,7 +21,7 @@ export function watch<T>(name: string, update: (rows: T[]) => void, error: (e: E
 
 export type Alert = { id: string; userId: string; dispatchTripId?: string; monitoringSessionId?: string; timestamp: number; ear?: number; closedDurationSec?: number; latitude?: number; longitude?: number; status?: string; note?: string };
 
-export type CompanyAccount = { uid: string; email: string; displayName: string; emailVerified: boolean; disabled: boolean; providers: string[]; staffRole: string | null; staffActive: boolean; driverStatus: string | null; createdAt: string; lastSignInAt: string | null };
+export type CompanyAccount = { authDisplayName?: string; employeeCode?: string; staffPhone?: string; uid: string; email: string; displayName: string; emailVerified: boolean; disabled: boolean; providers: string[]; staffRole: string | null; staffActive: boolean; driverStatus: string | null; createdAt: string; lastSignInAt: string | null };
 export async function listCompanyAccounts(pageToken?: string) {
   return businessCall<{ pageToken?: string }, { accounts: CompanyAccount[]; nextPageToken: string | null }>('listCompanyAccounts', { ...(pageToken ? { pageToken } : {}) });
 }
