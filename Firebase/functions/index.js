@@ -50,7 +50,7 @@ export async function handleDispatchCommand(request) {
     const saveReceipt = () => {
       tx.create(receiptRef, { uid, action, at: now, result });
       tx.create(auditRef, { actorId: uid, action, targetId: p.tripId || p.leaveId || p.driverId || operationId, at: now,
-        reason: action === 'reviewDriverDossier' ? 'Ghi chú đối chiếu nằm trong hồ sơ riêng tư' : String(p.reason || '').slice(0, 1000) });
+        reason: ['reviewDriverDossier', 'recordPhysicalDossier'].includes(action) ? 'Chi tiết tiếp nhận/đối chiếu nằm trong hồ sơ riêng tư' : String(p.reason || '').slice(0, 1000) });
       return result;
     };
 
@@ -60,10 +60,33 @@ export async function handleDispatchCommand(request) {
       if ((previous?.revision || 0) !== p.revision) fail('Hồ sơ đã thay đổi trên thiết bị khác. Tải lại trước khi nộp.');
       const fields = await validateDossier(p, uid, now);
       const submitted = { ...fields, driverId: uid, revision: (previous?.revision || 0) + 1,
-        status: 'submitted', submittedAt: now, reviewedBy: null, reviewedAt: null, reviewNote: '' };
+        status: 'submitted', submissionMethod: 'online', submittedAt: now, reviewedBy: null, reviewedAt: null, reviewNote: '' };
       tx.set(dossierRef, submitted);
       tx.create(dossierRef.collection('revisions').doc(String(submitted.revision)), submitted);
-      tx.update(driverSnap.ref, { displayName: fields.fullName, phone: fields.phone, qualificationStatus: 'submitted', updatedAt: now });
+      tx.update(driverSnap.ref, { displayName: fields.fullName, phone: fields.phone, qualificationStatus: 'submitted', dossierSubmissionMethod: 'online', updatedAt: now });
+      return saveReceipt();
+    }
+    if (action === 'recordPhysicalDossier') {
+      admin();
+      const driverId = identifier(p.driverId);
+      const dossierRef = ref('driverDossiers', driverId), targetRef = ref('drivers', driverId);
+      const [previousSnap, target] = await tx.getAll(dossierRef, targetRef);
+      if (!target.exists) fail('Tài xế cần có tài khoản và hồ sơ nhân sự trước khi nhận giấy tờ');
+      const previous = previousSnap.data();
+      if ((previous?.revision || 0) !== p.revision) fail('Hồ sơ đã thay đổi. Mở lại trước khi ghi nhận bản giấy.');
+      if (p.receivedConfirmed !== true) fail('Cần xác nhận đã thực sự nhận bộ hồ sơ giấy');
+      const receiptCode = text(p.receiptCode, 'mã phiếu hoặc mã lưu hồ sơ giấy', 100);
+      const receiptNote = text(p.receiptNote, 'ghi chú tiếp nhận, nơi lưu bản giấy', 1000);
+      const fields = await validateDossier(p, driverId, now, { requireUploads: false });
+      const submitted = { ...fields, driverId, revision: (previous?.revision || 0) + 1,
+        status: 'submitted', submissionMethod: 'in_person', submittedAt: now,
+        receivedBy: uid, receivedByName: String(staff.displayName || '').slice(0, 120), receivedAt: now,
+        receiptCode, receiptNote, reviewedBy: null, reviewedAt: null, reviewNote: '' };
+      tx.set(dossierRef, submitted);
+      tx.create(dossierRef.collection('revisions').doc(String(submitted.revision)), submitted);
+      tx.update(targetRef, { displayName: fields.fullName, phone: fields.phone,
+        qualificationStatus: 'submitted', dossierSubmissionMethod: 'in_person', updatedAt: now });
+      result.id = driverId;
       return saveReceipt();
     }
     if (action === 'reviewDriverDossier') {

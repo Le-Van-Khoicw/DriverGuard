@@ -25,6 +25,15 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         TextButton(onClick = onBack, enabled = !state.busy) { Text("← Quay lại") }
         Text("Hồ sơ nghề nghiệp tài xế", style = MaterialTheme.typography.headlineSmall)
+        Text("Có thể nộp online bên dưới hoặc giao bản giấy trực tiếp tại công ty. Trạng thái nộp trực tiếp do quản lý xác nhận trên hệ thống.", style = MaterialTheme.typography.bodySmall)
+        if (state.submissionMethod == "in_person") Card {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Công ty đã ghi nhận nhận bản giấy", style = MaterialTheme.typography.titleSmall)
+                Text("Mã phiếu: ${state.receiptCode}")
+                if (state.receivedAt > 0) Text("Ghi nhận lúc: ${java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(state.receivedAt))}")
+                Text("Tiếp nhận bản giấy và duyệt hồ sơ là hai bước riêng. Trạng thái xét duyệt hiển thị bên dưới.")
+            }
+        }
         Text(when(state.status) { "approved" -> "Quản lý đã duyệt hồ sơ. Sửa và nộp lại sẽ cần duyệt lại."; "submitted" -> "Đã nộp v${state.revision}, đang chờ quản lý đối chiếu."; "rejected" -> "Cần bổ sung hồ sơ theo ghi chú quản lý."; else -> "Hoàn thiện thông tin và giấy tờ để quản lý xét duyệt." })
         if (state.reviewNote.isNotBlank()) Card { Text("Ghi chú quản lý: ${state.reviewNote}", Modifier.padding(12.dp)) }
         if (state.loading || state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())

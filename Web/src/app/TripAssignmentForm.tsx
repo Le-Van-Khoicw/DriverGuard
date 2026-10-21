@@ -4,7 +4,7 @@ import { Driver, FleetVehicle, Order } from '../api/dispatch';
 export function driverAssignmentIssues(d: Driver, until: number, vehicleId: string) {
   const issues: string[] = [];
   if (d.accountStatus !== 'active') issues.push('Tài khoản chưa hoạt động');
-  if (!d.qualificationStatus) issues.push('Chưa nộp hồ sơ trên app');
+  if (!d.qualificationStatus) issues.push('Chưa có hồ sơ online hoặc bản giấy được ghi nhận');
   else if (d.qualificationStatus === 'submitted') issues.push('Hồ sơ đang chờ quản lý duyệt');
   else if (d.qualificationStatus !== 'approved') issues.push('Hồ sơ cần bổ sung và duyệt lại');
   else {

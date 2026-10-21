@@ -8,7 +8,7 @@ export type Order = { id: string; customer: string; customerPhone: string; sende
 export type Stop = { id: string; orderId: string; kind: 'pickup' | 'delivery'; address: string; contact: string; phone: string; items: Item[]; status: string; quantities?: number[]; note?: string; actualContact?: string; completedAt?: number; driverId?: string };
 export type Trip = { id: string; name: string; driverId: string; driverName: string; vehicleId: string; vehiclePlate: string; dispatcherId: string; createdBy: string; start: number; end: number; actualStart?: number; actualEnd?: number; status: string; assignmentVersion: number; orderIds: string[]; stops: Stop[]; updatedAt: number; history: { from: string | null; to: string; by: string; at: number; reason: string; location: string; cargoNote: string }[]; resolution?: { note: string; by: string }; issueReason?: string; declineReason?: string };
 export type FleetVehicle = { id: string; plate: string; capacityKg: number; status: string };
-export type Driver = { id: string; displayName: string; phone: string; email?: string; employeeCode?: string; accountStatus: string; qualificationStatus?: string; approvedVehicleIds?: string[]; licenseClass?: string; licenseExpiresAt?: number; healthExpiresAt?: number };
+export type Driver = { id: string; displayName: string; phone: string; email?: string; employeeCode?: string; accountStatus: string; qualificationStatus?: string; dossierSubmissionMethod?: 'online' | 'in_person'; approvedVehicleIds?: string[]; licenseClass?: string; licenseExpiresAt?: number; healthExpiresAt?: number };
 export type Leave = { id: string; driverId: string; start: number; end: number; reason: string; status: string; affectedTripIds?: string[] };
 export type Report = { id: string; userId: string; dispatchTripId?: string; assignmentVersion?: number; startTime: number; safetyScore: number | null; hasSufficientData: boolean; measurementCoverage: number; totalAlerts: number; aiDiagnosis: string };
 export const labels: Record<string, string> = { ready: 'Sẵn sàng', assigned: 'Đã giao chuyến', accepted: 'Đã nhận', in_progress: 'Đang chạy', handover_pending: 'Chờ nhận bàn giao', declined: 'Từ chối', needs_reassignment: 'Cần giao lại', completed: 'Hoàn thành', completed_issues: 'Kết thúc có vấn đề', cancelled: 'Đã hủy', delivered: 'Đã giao đủ', delivery_issue: 'Giao có vấn đề', pending: 'Chờ xử lý', approved: 'Đã duyệt', rejected: 'Từ chối', active: 'Hoạt động', locked: 'Đã khóa', full: 'Đủ', partial: 'Thiếu', failed: 'Thất bại', available: 'Sẵn sàng', maintenance: 'Bảo trì', inactive: 'Ngừng sử dụng' };
@@ -30,9 +30,11 @@ export type DriverDossier = {
   identityNumber: string; licenseNumber: string; licenseClass: string; licenseIssuedDate: string; licenseExpiresDate: string;
   healthCheckedDate: string; healthExpiresDate: string; emergencyName: string; emergencyPhone: string;
   reviewNote?: string; reviewedBy?: string; reviewedAt?: number; submittedAt: number;
+  submissionMethod?: 'online' | 'in_person'; receivedBy?: string; receivedByName?: string; receivedAt?: number; receiptCode?: string; receiptNote?: string;
   documents: { kind: string; path: string; name: string; contentType: string; size: number }[];
 };
 export function qualificationLabel(d: Driver) {
+  if (d.qualificationStatus === 'submitted' && d.dossierSubmissionMethod === 'in_person') return 'Đã nhận bản giấy — chờ duyệt';
   if (d.qualificationStatus === 'approved' && ((d.licenseExpiresAt || 0) <= Date.now() || (d.healthExpiresAt || 0) <= Date.now())) return 'Hồ sơ hết hạn';
   return ({ approved: 'Đã duyệt hồ sơ', submitted: 'Hồ sơ chờ duyệt', rejected: 'Cần bổ sung hồ sơ' } as Record<string, string>)[d.qualificationStatus || ''] || 'Chưa nộp hồ sơ';
 }

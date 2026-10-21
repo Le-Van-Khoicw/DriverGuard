@@ -39,3 +39,7 @@
 .login-environment { margin-top:20px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);font-size:12px }.login-environment strong { color:var(--primary-text) }.login-environment p { color:var(--muted);line-height:1.6;margin:7px 0 }.login-environment small { font-size:11px;line-height:1.7;color:var(--muted) }
 
 .forgot-password-link { justify-self:end;padding:4px 0 }.password-reset-help { margin:0;color:var(--muted);font-size:13px;line-height:1.6 }.login-form h3 { margin:0 }.login-form .success-box { line-height:1.6 }
+
+.physical-dossier-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.physical-dossier-form { margin-block: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
+@media (max-width: 640px) { .physical-dossier-grid { grid-template-columns: 1fr; } }

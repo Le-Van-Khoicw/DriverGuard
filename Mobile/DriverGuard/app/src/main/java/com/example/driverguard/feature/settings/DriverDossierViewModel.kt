@@ -27,7 +27,8 @@ data class DriverDossierState(
     val fields: Map<String, String> = emptyMap(), val documents: List<DossierFile> = emptyList(),
     val revision: Long = 0, val status: String = "not_submitted", val reviewNote: String = "",
     val busy: Boolean = false, val loading: Boolean = true, val dirty: Boolean = false,
-    val conflict: Boolean = false, val error: String? = null, val message: String? = null
+    val conflict: Boolean = false, val error: String? = null, val message: String? = null,
+    val submissionMethod: String = "online", val receiptCode: String = "", val receivedAt: Long = 0
 )
 
 class DriverDossierViewModel(application: Application) : AndroidViewModel(application) {
@@ -49,7 +50,9 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
         else {
             val revision = (latestRemote?.get("revision") as? Number)?.toLong() ?: 0
             _state.value = _state.value.copy(loading = false, conflict = revision != _state.value.revision,
-                status = latestRemote?.get("status") as? String ?: "not_submitted", reviewNote = latestRemote?.get("reviewNote") as? String ?: "")
+                status = latestRemote?.get("status") as? String ?: "not_submitted", reviewNote = latestRemote?.get("reviewNote") as? String ?: "",
+                submissionMethod = latestRemote?.get("submissionMethod") as? String ?: "online",
+                receiptCode = latestRemote?.get("receiptCode") as? String ?: "", receivedAt = (latestRemote?.get("receivedAt") as? Number)?.toLong() ?: 0)
         }
     }
     init {
@@ -75,7 +78,9 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
                 "fullName" -> authUser?.displayName.orEmpty(); else -> ""
             }) }, documents = docs.map { DossierFile(it["kind"] as String, it["path"] as String, it["name"] as String) },
             revision = (remote?.get("revision") as? Number)?.toLong() ?: 0,
-            status = remote?.get("status") as? String ?: "not_submitted", reviewNote = remote?.get("reviewNote") as? String ?: "", loading = false)
+            status = remote?.get("status") as? String ?: "not_submitted", reviewNote = remote?.get("reviewNote") as? String ?: "", loading = false,
+            submissionMethod = remote?.get("submissionMethod") as? String ?: "online",
+            receiptCode = remote?.get("receiptCode") as? String ?: "", receivedAt = (remote?.get("receivedAt") as? Number)?.toLong() ?: 0)
     }
     private fun saveDraft() {
         val s = _state.value

@@ -60,6 +60,26 @@ Nháp giấy tờ không được đưa vào Android Auto Backup/Device Transfer
 
 ## 4. Duyệt và kiểm tra phân công
 
+### Nộp trực tiếp tại công ty (bổ sung ngày 22/10/2026)
+
+- Admin mở **Tài xế → Xem/duyệt hồ sơ → Ghi nhận đã nộp trực tiếp (bản giấy)**.
+- Nhập thông tin từ bản giấy, mã phiếu/mã lưu và ghi chú nơi lưu; xác nhận đã thực nhận.
+  Thông tin GPLX/sức khỏe và hạn vẫn bắt buộc, không yêu cầu upload ảnh.
+- `recordPhysicalDossier` chỉ dành cho admin đang hoạt động. Client tài xế/dispatcher
+  không thể tự nhận đã nộp giấy hoặc dùng cờ để bỏ qua yêu cầu ảnh của nộp online.
+- Máy chủ lưu `submissionMethod=in_person`, `receivedBy`, `receivedByName`, `receivedAt`,
+  `receiptCode`, `receiptNote`; hồ sơ và revisions giữ quyền riêng tư như trước.
+- Tiếp nhận tạo revision mới với `status=submitted`. **Đã nhận bản giấy chưa phải đã duyệt**;
+  admin tiếp tục đối chiếu, chọn xe phù hợp, ghi chú và duyệt/yêu cầu bổ sung.
+- Tiếp nhận mới không tự mở tài khoản. Hồ sơ đã được duyệt mà tiếp nhận lại sẽ trở về
+  chờ duyệt, giữ lịch sử cũ và không cho giao chuyến mới cho đến khi được duyệt lại.
+- App tài xế hiển thị thông tin tiếp nhận từ máy chủ, không có nút tự đánh dấu nhận giấy.
+  Nếu đang giữ bản nháp online cũ, revision mới báo xung đột để tránh ghi đè hồ sơ giấy.
+- Tài xế vẫn có thể chọn nộp online ở lần sau; server bắt buộc hai mặt GPLX như trước.
+- “Trực tiếp” là cách giao giấy tờ; thao tác ghi nhận/duyệt trên web vẫn cần mạng.
+- `/health` backend mới có `features.physicalDossiers=true` để xác nhận Render đã lấy
+  bản code hỗ trợ. Build thành công chưa chứng minh thao tác tiếp nhận thật đã được nghiệm thu.
+
 - `accountStatus` và `qualificationStatus` độc lập: tài khoản hoạt động không tự
   chứng minh hồ sơ đã được duyệt.
 - Admin chọn các xe đã xác nhận phù hợp hồ sơ khi duyệt, lưu `approvedVehicleIds`.

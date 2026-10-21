@@ -117,6 +117,6 @@ export default function LogisticsPortal({ staff, logout }: { staff: Staff; logou
       {selectedTrip.status === 'completed_issues' && <form onSubmit={e => { const f = formValues(e); void run('resolveIssue', { tripId: selectedTrip.id, ...f }); }}><p>Vấn đề: {selectedTrip.issueReason}</p>{selectedTrip.resolution && <p>Đã xử lý: {selectedTrip.resolution.note}</p>}<Field name="reason" label="Kết quả xử lý / phương án tiếp theo" /><button disabled={busy}>Ghi nhận xử lý</button></form>}
       {error && <p className="log-error" role="alert">{error}</p>}
     </Dialog>}
-    {selectedDriver && <Dialog title="Hồ sơ tài xế" close={() => !busy && setSelectedDriverId(null)}><DriverProfileReview key={selectedDriver.id} vehicles={vehicles} driver={selectedDriver} admin={admin} busy={busy} error={error} review={data => void run('reviewDriverDossier', data)} /></Dialog>}
+    {selectedDriver && <Dialog title="Hồ sơ tài xế" close={() => !busy && setSelectedDriverId(null)}><DriverProfileReview key={selectedDriver.id} vehicles={vehicles} driver={selectedDriver} admin={admin} busy={busy} error={error} review={data => void run('reviewDriverDossier', data)} recordPhysical={data => void run('recordPhysicalDossier', data)} /></Dialog>}
   </div>;
 }
