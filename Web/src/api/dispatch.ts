@@ -29,7 +29,7 @@ export type DriverDossier = {
   driverId: string; revision: number; status: string; fullName: string; phone: string; birthDate: string; address: string;
   identityNumber: string; licenseNumber: string; licenseClass: string; licenseIssuedDate: string; licenseExpiresDate: string;
   healthCheckedDate: string; healthExpiresDate: string; emergencyName: string; emergencyPhone: string;
-  reviewNote?: string; reviewedBy?: string; reviewedAt?: number; submittedAt: number;
+  reviewNote?: string; reviewedBy?: string; reviewedByName?: string; reviewedByEmail?: string; reviewedByEmployeeCode?: string; reviewedAt?: number; submittedAt: number;
   submissionMethod?: 'online' | 'in_person'; receivedBy?: string; receivedByName?: string; receivedAt?: number; receiptCode?: string; receiptNote?: string;
   documents: { kind: string; path: string; name: string; contentType: string; size: number }[];
 };

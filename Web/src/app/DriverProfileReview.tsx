@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../api/firebase';
 import { readDocument } from '../api/documentFiles';
 import { Driver, DriverDossier, FleetVehicle, qualificationLabel } from '../api/dispatch';
@@ -96,7 +96,7 @@ export default function DriverProfileReview({ driver, admin, busy, review, recor
       </div>
 
       <p className="account-help">
-        UID: {driver.id} · Trạng thái tài khoản: <strong>{driver.accountStatus}</strong>.
+        UID: {driver.id} · Trạng thái tài khoản: <strong>{({ pending: 'Chờ kích hoạt', active: 'Hoạt động', locked: 'Đã khóa', rejected: 'Từ chối' } as Record<string, string>)[driver.accountStatus] || driver.accountStatus}</strong>.
       </p>
 
       {!admin && (
@@ -209,7 +209,7 @@ export default function DriverProfileReview({ driver, admin, busy, review, recor
 
           {dossier.reviewNote && <p><strong>Ghi chú xét duyệt:</strong> {dossier.reviewNote}</p>}
           {dossier.reviewedBy && (
-            <p className="account-help">Người duyệt: {dossier.reviewedBy} · {dossier.reviewedAt ? new Date(dossier.reviewedAt).toLocaleString('vi-VN') : ''}</p>
+            <p className="account-help">Người duyệt: <ReviewerIdentity dossier={dossier} /> · {dossier.reviewedAt ? new Date(dossier.reviewedAt).toLocaleString('vi-VN') : ''}</p>
           )}
 
           {/* FORM XÉT DUYỆT (CHỈ HIỆN KHI SUBMITTED) */}
@@ -274,7 +274,7 @@ export default function DriverProfileReview({ driver, admin, busy, review, recor
                   onClick={() => review({ driverId: driver.id, revision: dossier.revision, status: 'approved', verified, vehicleIds, reason: note })}
                   style={{ background: '#16a34a', color: '#fff', fontWeight: 600, padding: '10px 20px', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
                 >
-                  👍 DUYỆT HỒ SƠ (CHO PHÉP CHẠY XE)
+                  {busy ? 'Đang gửi yêu cầu duyệt…' : 'Duyệt hồ sơ'}
                 </button>
                 <button
                   type="button"
@@ -289,10 +289,31 @@ export default function DriverProfileReview({ driver, admin, busy, review, recor
           )}
 
           <p className="account-help" style={{ marginTop: '14px' }}>
-            Hồ sơ được duyệt sẽ kích hoạt quyền nhận chuyến và điều phối xe cho tài xế.
+            {dossier.status === 'approved' && driver.accountStatus === 'pending' ? 'Hồ sơ đã duyệt. Tài khoản vẫn chờ kích hoạt: trở lại danh sách Tài xế, chọn Hoạt động và bấm Lưu tài khoản.' : 'Duyệt hồ sơ xác nhận giấy tờ. Tài khoản phải ở trạng thái Hoạt động thì tài xế mới được nhận chuyến.'}
           </p>
         </>
       )}
     </div>
   );
+}
+
+function ReviewerIdentity({ dossier }: { dossier: DriverDossier }) {
+  const [profile, setProfile] = useState<{ displayName?: string; email?: string; employeeCode?: string } | null>(null);
+  useEffect(() => {
+    let current = true;
+    setProfile(null);
+    // Old records only contain the UID. Resolve their staff profile without rewriting review history.
+    if (dossier.reviewedBy && !dossier.reviewedByName && !dossier.reviewedByEmail) {
+      void getDoc(doc(db, 'staff', dossier.reviewedBy)).then(snapshot => {
+        if (current) setProfile(snapshot.exists() ? snapshot.data() : null);
+      }).catch(() => {});
+    }
+    return () => { current = false; };
+  }, [dossier.reviewedBy, dossier.reviewedByName, dossier.reviewedByEmail]);
+  const name = dossier.reviewedByName || profile?.displayName;
+  const email = dossier.reviewedByEmail || profile?.email;
+  const code = dossier.reviewedByEmployeeCode || profile?.employeeCode;
+  return <span title={`UID: ${dossier.reviewedBy}`}>
+    {[name || (!email ? 'Quản trị viên' : ''), email, code].filter(Boolean).join(' · ')}
+  </span>;
 }

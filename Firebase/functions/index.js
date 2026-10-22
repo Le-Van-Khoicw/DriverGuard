@@ -120,9 +120,12 @@ export async function handleDispatchCommand(request) {
         if (vehicles.some(v => !v.exists)) fail('Có xe không còn trong danh sách công ty');
       }
       const note = text(p.reason, p.status === 'rejected' ? 'lý do yêu cầu bổ sung' : 'ghi chú đối chiếu');
-      tx.update(dossierRef, { status: p.status, reviewNote: note, reviewedBy: uid, reviewedAt: now, approvedVehicleIds });
+      // Keep the reviewer's identity at review time even if their profile changes later.
+      const reviewer = { reviewedByName: String(staff.displayName || '').slice(0, 200),
+        reviewedByEmail: String(staff.email || '').slice(0, 320), reviewedByEmployeeCode: String(staff.employeeCode || '').slice(0, 40) };
+      tx.update(dossierRef, { status: p.status, reviewNote: note, reviewedBy: uid, ...reviewer, reviewedAt: now, approvedVehicleIds });
       tx.set(dossierRef.collection('revisions').doc(String(dossier.revision)), { ...dossier,
-        status: p.status, reviewNote: note, reviewedBy: uid, reviewedAt: now, approvedVehicleIds });
+        status: p.status, reviewNote: note, reviewedBy: uid, ...reviewer, reviewedAt: now, approvedVehicleIds });
       tx.update(target.ref, { qualificationStatus: p.status, licenseExpiresAt: dossier.licenseExpiresAt,
         healthExpiresAt: dossier.healthExpiresAt, licenseClass: dossier.licenseClass, dossierRevision: dossier.revision, approvedVehicleIds, updatedAt: now });
       return saveReceipt();

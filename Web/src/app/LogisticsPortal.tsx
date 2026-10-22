@@ -6,6 +6,8 @@ import TripAssignmentForm, { driverAssignmentIssues } from './TripAssignmentForm
 import DriverProfileReview from './DriverProfileReview';
 import AccountDirectory from './AccountDirectory';
 import ErrorNotice from './ErrorNotice';
+import RequestNotice from './RequestNotice';
+import { warmBusinessServer } from '../api/businessFunctions';
 import StaffAccessForm from './StaffAccessForm';
 import TransportOrderForm from './TransportOrderForm';
 import FleetOverview from './FleetOverview';
@@ -33,6 +35,8 @@ export default function LogisticsPortal({ staff, logout }: { staff: Staff; logou
   const [errors, setErrors] = useState<Record<string, string>>({}), [loaded, setLoaded] = useState<string[]>([]);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [errorNotice, setErrorNotice] = useState('');
+  const [requestLabel, setRequestLabel] = useState('Đang lưu thay đổi');
+  useEffect(() => { warmBusinessServer(); }, []);
   useEffect(() => { if (error) setErrorNotice(error); }, [error]);
   const [dialog, setDialog] = useState<'order' | 'trip' | 'vehicle' | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
@@ -62,7 +66,8 @@ export default function LogisticsPortal({ staff, logout }: { staff: Staff; logou
   useEffect(() => { if (selectedTrip) { const fresh = trips.find(t => t.id === selectedTrip.id); if (fresh) setSelectedTrip(fresh); } }, [trips]);
   async function run(action: string, data: Record<string, unknown>, onSuccess?: () => void) {
     if (busy) return;
-    setBusy(true); setError('');
+    setRequestLabel(action === 'reviewDriverDossier' ? (data.status === 'approved' ? 'Đang duyệt hồ sơ' : 'Đang gửi yêu cầu bổ sung hồ sơ') : 'Đang lưu thay đổi');
+    setBusy(true); setError(''); setErrorNotice('');
     try { await command(action, data); onSuccess?.(); }
     catch (e) { setError(e instanceof Error ? e.message : 'Không lưu được. Kiểm tra mạng rồi thử lại.'); }
     finally { setBusy(false); }
@@ -82,6 +87,7 @@ export default function LogisticsPortal({ staff, logout }: { staff: Staff; logou
     setErrorNotice(`${label}: ${field.validity.valueMissing ? 'Vui lòng điền hoặc chọn mục này.' : 'Giá trị chưa đúng, vui lòng kiểm tra lại.'}`);
   }}>
     <ErrorNotice message={errorNotice} dismiss={() => setErrorNotice('')} />
+    <RequestNotice active={busy} label={requestLabel} />
     {menu && <button className="sidebar-backdrop" onClick={() => setMenu(false)} aria-label="Đóng menu" />}
     <aside className={`sidebar ${menu ? 'sidebar-open' : ''}`}>
       <div className="sidebar-brand"><span className="brand-mark"><ShieldCheck /></span><div><strong>DrowsyGuard</strong><small>{admin ? 'Admin Portal' : 'Điều phối vận tải'}</small></div><button className="mobile-close" onClick={() => setMenu(false)} aria-label="Đóng menu"><X /></button></div>
