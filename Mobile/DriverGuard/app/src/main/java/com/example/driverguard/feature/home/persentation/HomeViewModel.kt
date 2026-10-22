@@ -14,8 +14,9 @@ class HomeViewModel : ViewModel() {
     val uiState: StateFlow<HomeUiState> = combine(
         UserProfileRepository.profile,
         AlarmRepository.savedTrips,
-        AlarmRepository.events
-    ) { profile, trips, alerts ->
+        AlarmRepository.events,
+        com.example.driverguard.feature.dispatch.CompanyVehicleState.current
+    ) { profile, trips, alerts, vehicle ->
         val latestTrip = trips.firstOrNull()
         val totalAlertsInTrips = trips.sumOf { it.totalAlerts }
         val latestLabel = latestTrip?.let {
@@ -29,8 +30,8 @@ class HomeViewModel : ViewModel() {
             isDeviceOnline = true,
             todayAlertCount = totalAlertsInTrips.coerceAtLeast(alerts.size),
             latestAlert = latestLabel,
-            vehicleName = profile.vehicleName,
-            isVehicleConfigured = profile.isVehicleConfigured
+            vehicleName = vehicle?.let { "${it.vehicleName.ifBlank { "Xe công ty" }} · ${it.vehiclePlate}" }.orEmpty(),
+            isVehicleConfigured = vehicle != null
         )
     }.stateIn(
         scope = viewModelScope,

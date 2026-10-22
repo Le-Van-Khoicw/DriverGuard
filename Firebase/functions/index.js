@@ -51,8 +51,8 @@ export async function handleDispatchCommand(request) {
     const auditRef = db.collection('dispatchAudit').doc();
     const saveReceipt = () => {
       tx.create(receiptRef, { uid, action, at: now, result });
-      tx.create(auditRef, { actorId: uid, action, targetId: p.tripId || p.leaveId || p.driverId || operationId, at: now,
-        reason: ['reviewDriverDossier', 'recordPhysicalDossier'].includes(action) ? 'Chi tiết tiếp nhận/đối chiếu nằm trong hồ sơ riêng tư' : String(p.reason || '').slice(0, 1000) });
+      tx.create(auditRef, { actorId: uid, action, targetId: p.tripId || p.leaveId || p.driverId || p.orderId || operationId, at: now,
+        reason: ['reviewDriverDossier', 'recordPhysicalDossier', 'updateDriverVehicles'].includes(action) ? 'Chi tiết tiếp nhận/đối chiếu nằm trong hồ sơ riêng tư' : String(p.reason || '').slice(0, 1000) });
       return result;
     };
 
@@ -130,14 +130,53 @@ export async function handleDispatchCommand(request) {
         healthExpiresAt: dossier.healthExpiresAt, licenseClass: dossier.licenseClass, dossierRevision: dossier.revision, approvedVehicleIds, updatedAt: now });
       return saveReceipt();
     }
+    if (action === 'updateDriverVehicles') {
+      admin();
+      const driverRef = ref('drivers', p.driverId), dossierRef = ref('driverDossiers', p.driverId);
+      const [driver, dossierSnap] = await tx.getAll(driverRef, dossierRef);
+      const dossier = dossierSnap.data();
+      requireApprovedDossier(driver.data(), now);
+      if (!dossier || dossier.status !== 'approved' || dossier.revision !== p.revision) fail('Hồ sơ đã thay đổi. Mở lại trước khi cập nhật xe.');
+      if (p.verified !== true) fail('Cần xác nhận hạng GPLX phù hợp các xe đã chọn');
+      if (!Array.isArray(p.vehicleIds) || !p.vehicleIds.length || p.vehicleIds.length > 100) fail('Chọn từ 1 đến 100 xe được phép lái');
+      const vehicleIds = [...new Set(p.vehicleIds.map(identifier))];
+      const vehicles = await tx.getAll(...vehicleIds.map(id => ref('fleetVehicles', id)));
+      if (vehicles.some(v => !v.exists)) fail('Có xe không còn trong đội xe');
+      const assigned = await tx.get(db.collection('dispatchTrips').where('driverId', '==', driverRef.id));
+      if (assigned.docs.some(t => !terminal(t.data().status) && !vehicleIds.includes(t.data().vehicleId))) fail('Không bỏ quyền xe đang có chuyến chưa kết thúc; bàn giao hoặc kết thúc chuyến trước.');
+      const history = [...(dossier.vehicleApprovalHistory || []), { vehicleIds, by: uid, byName: staff.displayName || '', at: now }];
+      if (history.length > 100) fail('Đã vượt giới hạn cập nhật xe trong phiên bản hồ sơ này');
+      const changes = { approvedVehicleIds: vehicleIds, vehicleApprovalHistory: history };
+      tx.update(driverRef, { approvedVehicleIds: vehicleIds, updatedAt: now });
+      tx.update(dossierRef, changes);
+      tx.set(dossierRef.collection('revisions').doc(String(dossier.revision)), { ...dossier, ...changes });
+      result.id = driverRef.id;
+      return saveReceipt();
+    }
+    if (action === 'deleteOrder') {
+      dispatcher();
+      const orderRef = ref('transportOrders', p.orderId), snapshot = await tx.get(orderRef), old = snapshot.data();
+      if (!old || old.status !== 'ready' || old.tripId) fail('Chỉ xóa đơn chưa xếp chuyến. Đơn đã giao cần xử lý qua chuyến.');
+      if (p.expectedUpdatedAt !== (old.updatedAt || old.createdAt || 0)) fail('Đơn đã thay đổi. Tải lại trước khi xóa.');
+      // Hide from operations but retain the original order and audit trail for reconciliation.
+      tx.update(orderRef, { status: 'deleted', deletedBy: uid, deletedAt: now, updatedAt: now });
+      result.id = orderRef.id;
+      return saveReceipt();
+    }
     if (action === 'updateMyStaffProfile') {
       dispatcher();
       tx.update(staffSnap.ref, { displayName: text(p.displayName, 'họ tên', 120), phone: text(p.phone, 'điện thoại', 30), updatedAt: now });
       return saveReceipt();
     }
 
-    if (action === 'createOrder') {
+    if (['createOrder', 'updateOrder'].includes(action)) {
       dispatcher();
+      const orderRef = ref('transportOrders', action === 'createOrder' ? operationId : p.orderId);
+      const previous = action === 'updateOrder' ? (await tx.get(orderRef)).data() : null;
+      if (action === 'updateOrder') {
+        if (!previous || previous.status !== 'ready' || previous.tripId) fail('Chỉ sửa đơn chưa xếp chuyến. Đơn đã giao cần xử lý qua chuyến.');
+        if (p.expectedUpdatedAt !== (previous.updatedAt || previous.createdAt || 0)) fail('Đơn đã thay đổi. Mở lại trước khi lưu.');
+      }
       const items = p.items;
       if (!Array.isArray(items) || !items.length || items.length > 30) fail('Cần từ 1 đến 30 mặt hàng');
       for (const item of items) if (!validQuantity(item.quantity, item.unit)) fail(`Số lượng ${String(item.name || 'mặt hàng').slice(0, 100)} phải dương; kiện/thùng/pallet dùng số nguyên`, 'invalid-argument');
@@ -148,9 +187,13 @@ export async function handleDispatchCommand(request) {
         receiverPhone: text(p.receiverPhone, 'SĐT người nhận', 40), deliveryAddress: text(p.deliveryAddress, 'địa chỉ giao'),
         items: items.map(i => ({ name: text(i.name, 'tên hàng', 200), quantity: positive(i.quantity, 'Số lượng'), unit: text(i.unit, 'đơn vị', 30) })),
         weightKg: positive(p.weightKg, 'Khối lượng'), ...interval(p), note: String(p.note || '').slice(0, 1000),
-        status: 'ready', tripId: null, createdBy: uid, createdByName: staff.displayName || '', createdByEmail: staff.email || '', createdAt: now, updatedAt: now,
+        status: 'ready', tripId: null, createdBy: previous?.createdBy || uid,
+        createdByName: previous ? previous.createdByName || '' : staff.displayName || '',
+        createdByEmail: previous ? previous.createdByEmail || '' : staff.email || '',
+        createdAt: previous?.createdAt || now, updatedBy: uid, updatedAt: now,
       };
-      tx.create(ref('transportOrders', operationId), order);
+      if (previous) tx.update(orderRef, order); else tx.create(orderRef, order);
+      result.id = orderRef.id;
       return saveReceipt();
     }
     if (action === 'saveStaff') {
@@ -204,7 +247,7 @@ export async function handleDispatchCommand(request) {
       const previousKey = old.data()?.plate?.replace(/[^A-Z0-9]/g, '');
       if (previousKey && previousKey !== plateKey) tx.delete(ref('fleetVehiclePlates', previousKey));
       tx.set(plateRef, { vehicleId: vehicleRef.id });
-      tx.set(vehicleRef, { plate, capacityKg: positive(p.capacityKg, 'Tải trọng'),
+      tx.set(vehicleRef, { plate, name: p.name ? text(p.name, 'tên xe', 120) : '', capacityKg: positive(p.capacityKg, 'Tải trọng'),
         status: ['available', 'maintenance', 'inactive'].includes(p.status) ? p.status : 'available',
         updatedBy: uid, updatedAt: now, createdAt: old.data()?.createdAt || now });
       result.id = vehicleRef.id;
@@ -324,7 +367,7 @@ export async function handleDispatchCommand(request) {
       if (history.length > 100) fail('Đã vượt giới hạn 100 lần bàn giao/chuyến');
       if (action === 'handover') { text(p.location, 'vị trí bàn giao'); text(p.cargoNote, 'tình trạng hàng'); }
       Object.assign(trip, { driverId, driverName: driverDoc.data().fullName || driverDoc.data().displayName || driverId,
-        vehiclePlate: vehicleDoc.data().plate, dispatcherId: uid, dispatcherName: staff.displayName || '', dispatcherEmail: staff.email || '', assignmentVersion: trip.assignmentVersion + 1,
+        vehicleName: vehicleDoc.data().name || '', vehiclePlate: vehicleDoc.data().plate, dispatcherId: uid, dispatcherName: staff.displayName || '', dispatcherEmail: staff.email || '', assignmentVersion: trip.assignmentVersion + 1,
         status: action === 'handover' ? 'handover_pending' : 'assigned', history, assignedAt: now });
       if (previousCalendarDoc) {
         const previous = clean(previousCalendarDoc.data()); delete previous.reservations[tripRef.id]; tx.set(previousCalendarDoc.ref, previous);

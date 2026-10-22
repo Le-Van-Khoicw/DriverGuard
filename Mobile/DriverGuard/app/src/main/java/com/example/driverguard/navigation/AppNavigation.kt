@@ -220,6 +220,6 @@ fun AppNavigation(notificationTripId: String? = null, onNotificationConsumed: ()
             DriverDossierScreen(dossier) { nav.popBackStack() }
         }
         composable(Routes.DEVICES) { DevicesScreen { nav.popBackStack() } }
-        composable(Routes.VEHICLES) { VehiclesScreen { nav.popBackStack() } }
+        composable(Routes.VEHICLES) { VehiclesScreen(viewModel = dispatch) { nav.popBackStack() } }
     }
 }

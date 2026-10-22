@@ -4,6 +4,7 @@ import { db } from '../api/firebase';
 import { readDocument } from '../api/documentFiles';
 import { Driver, DriverDossier, FleetVehicle, qualificationLabel } from '../api/dispatch';
 import PhysicalDossierForm from './PhysicalDossierForm';
+import VehiclePermissionsForm from './VehiclePermissionsForm';
 import ErrorNotice from './ErrorNotice';
 
 const documentNames: Record<string, string> = {
@@ -14,10 +15,11 @@ const documentNames: Record<string, string> = {
   health: 'Giấy khám / xác nhận sức khỏe'
 };
 
-export default function DriverProfileReview({ driver, admin, busy, review, recordPhysical, vehicles }: {
+export default function DriverProfileReview({ driver, admin, busy, review, recordPhysical, updateVehicles, vehicles }: {
   vehicles: FleetVehicle[]; driver: Driver; admin: boolean; busy: boolean; error: string;
   review: (data: Record<string, unknown>) => void;
   recordPhysical: (data: Record<string, unknown>) => void;
+  updateVehicles: (data: Record<string, unknown>) => void;
 }) {
   const [dossier, setDossier] = useState<DriverDossier | null>(null);
   const [loading, setLoading] = useState(admin);
@@ -96,7 +98,7 @@ export default function DriverProfileReview({ driver, admin, busy, review, recor
       </div>
 
       <p className="account-help">
-        UID: {driver.id} · Trạng thái tài khoản: <strong>{({ pending: 'Chờ kích hoạt', active: 'Hoạt động', locked: 'Đã khóa', rejected: 'Từ chối' } as Record<string, string>)[driver.accountStatus] || driver.accountStatus}</strong>.
+        Trạng thái tài khoản: <strong>{({ pending: 'Chờ kích hoạt', active: 'Hoạt động', locked: 'Đã khóa', rejected: 'Từ chối' } as Record<string, string>)[driver.accountStatus] || driver.accountStatus}</strong>.
       </p>
 
       {!admin && (
@@ -107,6 +109,7 @@ export default function DriverProfileReview({ driver, admin, busy, review, recor
       )}
 
       {loading && <p>Đang đọc hồ sơ…</p>}
+      {admin && dossier?.status === 'approved' && <VehiclePermissionsForm driver={driver} dossier={dossier} vehicles={vehicles} busy={busy} save={updateVehicles} />}
       {admin && !loading && !dossier && (
         <p>Chưa có hồ sơ của {driver.displayName} để xét duyệt. Bấm nút bên dưới để ghi nhận hồ sơ bản giấy.</p>
       )}

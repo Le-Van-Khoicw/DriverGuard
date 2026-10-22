@@ -1,18 +1,24 @@
 import { FormEvent, useState } from 'react';
+import { Order } from '../api/dispatch';
 import { allowsFraction, shippingUnits, validQuantity } from '../api/quantities';
 
-export default function TransportOrderForm({ busy, error, save }: {
-  busy: boolean; error: string; save: (data: Record<string, unknown>) => void;
+export default function TransportOrderForm({ busy, error, save, initialOrder }: {
+  initialOrder?: Order; busy: boolean; error: string; save: (data: Record<string, unknown>) => void;
 }) {
-  const [items, setItems] = useState([{ name: '', quantity: '1', unit: 'kiện' }]);
-  const [sameContact, setSameContact] = useState(true);
+  const [items, setItems] = useState(initialOrder?.items.map(item => ({ ...item, quantity: String(item.quantity) })) || [{ name: '', quantity: '1', unit: 'kiện' }]);
+  const [sameContact, setSameContact] = useState(!initialOrder || (initialOrder.sender === initialOrder.customer && initialOrder.senderPhone === initialOrder.customerPhone));
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.currentTarget));
     save({ ...f, sender: sameContact ? f.customer : f.sender, senderPhone: sameContact ? f.customerPhone : f.senderPhone,
       start: new Date(String(f.start)).getTime(), end: new Date(String(f.end)).getTime(), weightKg: Number(f.weightKg), items: items.map(i => ({ ...i, quantity: Number(i.quantity) })) });
   }
-  const field = (name: string, label: string, example: string, type = 'text', required = true) => <label>{label}{required && <span className="field-required" aria-hidden="true"> *</span>}<input name={name} type={type} placeholder={example} required={required} min={type === 'number' ? '0.001' : undefined} step={type === 'number' ? 'any' : undefined} /></label>;
+  const fieldValue = (name: string) => {
+    const value = initialOrder?.[name as keyof Order];
+    if ((name === 'start' || name === 'end') && typeof value === 'number') return new Date(value - new Date(value).getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    return typeof value === 'string' || typeof value === 'number' ? value : undefined;
+  };
+  const field = (name: string, label: string, example: string, type = 'text', required = true) => <label>{label}{required && <span className="field-required" aria-hidden="true"> *</span>}<input name={name} type={type} defaultValue={fieldValue(name)} placeholder={example} required={required} min={type === 'number' ? '0.001' : undefined} step={type === 'number' ? 'any' : undefined} /></label>;
   return <form className="compact-order-form" onSubmit={submit}>
     <p className="form-intro">Đơn chở hàng cho khách doanh nghiệp. Các ô có dấu * cần được điền.</p>
     <fieldset><legend>1. Khách thuê vận chuyển</legend><div className="log-form-grid">{field('customer', 'Doanh nghiệp / tên khách', 'VD: Công ty TNHH Minh An')}{field('customerPhone', 'SĐT liên hệ bên khách', 'VD: 0901234567', 'tel')}</div></fieldset>

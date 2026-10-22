@@ -163,9 +163,6 @@ object UserProfileRepository {
                 "phone" to phone,
                 "email" to (user.email ?: ""),
                 "avatarUri" to (avatarUri ?: ""),
-                "vehicleName" to _profile.value.vehicleName,
-                "licensePlate" to _profile.value.licensePlate,
-                "vehicleType" to _profile.value.vehicleType,
                 "deviceName" to DeviceUtils.deviceName,
                 "deviceCode" to DeviceUtils.deviceCode,
                 "updatedAt" to System.currentTimeMillis()
@@ -181,34 +178,4 @@ object UserProfileRepository {
         }
     }
 
-    /** Cập nhật thông tin phương tiện và đẩy lên Cloud Firestore. */
-    fun updateVehicle(
-        vehicleName: String,
-        licensePlate: String,
-        vehicleType: String
-    ) {
-        _profile.value = _profile.value.copy(
-            vehicleName = vehicleName,
-            licensePlate = licensePlate,
-            vehicleType = vehicleType
-        )
-
-        val uid = auth.currentUser?.uid
-        if (!uid.isNullOrBlank()) {
-            val data = hashMapOf(
-                "vehicleName" to vehicleName,
-                "licensePlate" to licensePlate,
-                "vehicleType" to vehicleType,
-                "updatedAt" to System.currentTimeMillis()
-            )
-            firestore.collection("drivers").document(uid)
-                .set(data, SetOptions.merge())
-                .addOnSuccessListener {
-                    Log.d("FIREBASE_SYNC", "Đã đồng bộ Thông tin xe lên Cloud Firestore thành công!")
-                }
-                .addOnFailureListener { e ->
-                    Log.e("FIREBASE_SYNC", "Lỗi ghi xe lên Firestore: ${e.message}")
-                }
-        }
-    }
 }

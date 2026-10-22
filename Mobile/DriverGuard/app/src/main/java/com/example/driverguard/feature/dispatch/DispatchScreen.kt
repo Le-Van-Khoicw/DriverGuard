@@ -23,10 +23,10 @@ fun DispatchScreen(viewModel: DispatchViewModel, onMonitor: (AssignedTrip) -> Un
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Chuyến được phân công", style = MaterialTheme.typography.headlineSmall)
         Text("Chỉ thao tác nhận/giao hàng khi đã dừng xe an toàn.")
-        Text(if (state.fromCache) "Đang xem dữ liệu lưu trên máy; chưa xác nhận thông tin mới nhất." else "Đã nhận dữ liệu từ máy chủ.")
+        Text(if (state.fromCache) "Đang xem dữ liệu lưu trên máy; chưa xác nhận thông tin mới nhất." else "Đã cập nhật chuyến mới nhất.")
         if (!state.loaded) CircularProgressIndicator()
         if (state.pending > 0) {
-            Text("${state.pending} thao tác chờ đồng bộ. Chưa coi là máy chủ đã chấp nhận.")
+            Text("${state.pending} thao tác chờ đồng bộ. Chưa được xác nhận.")
             OutlinedButton(onClick = viewModel::retrySync, enabled = !state.busy && !state.conflict) { Text("Thử đồng bộ") }
         }
         state.message?.let { Text(it) }

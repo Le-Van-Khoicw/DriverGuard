@@ -19,7 +19,7 @@ export default function StaffAccessForm({ account, employee, busy, chooseAccount
       // Only editable permissions/contact are sent. The server resolves the name and code itself.
       save({ staffId: account.uid, phone: String(data.get('phone') || ''), role: data.get('role'), active: data.get('active') === 'true' });
     }}>
-      <label>Tài khoản<input value={account.email || account.uid} readOnly /><small>UID: {account.uid}</small></label>
+      <label>Tài khoản<input value={account.email || account.uid} readOnly /></label>
       <label>Tên nhân viên (tự động)<input value={name} readOnly /></label>
       <label>Mã nhân viên (tự động)<input value={employee?.employeeCode || account.employeeCode || ''} placeholder="Được cấp khi lưu quyền lần đầu" readOnly /></label>
       <label>SĐT nhân viên<input name="phone" type="tel" defaultValue={employee?.phone ?? account.staffPhone ?? ''} placeholder="VD: 0901234567" maxLength={30} /></label>

@@ -56,7 +56,6 @@ fun HomeScreen(
     val c = MaterialTheme.c
     val font = MaterialTheme.font
     val state by viewModel.uiState.collectAsState()
-    var dismissedVehicleBanner by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -100,79 +99,6 @@ fun HomeScreen(
                     tint = c.primary,
                     modifier = Modifier.size(24.dp)
                 )
-            }
-        }
-
-        // ── Banner Nhắc nhở Thiết lập xe nếu chưa cấu hình ──
-        if (!state.isVehicleConfigured && !dismissedVehicleBanner) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = c.warningBg),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, c.warning.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(c.warning),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.DirectionsCar,
-                                contentDescription = "Vehicle",
-                                tint = c.textOnColor,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Chưa thiết lập phương tiện",
-                                color = c.text,
-                                fontSize = font.sm,
-                                fontWeight = font.bold
-                            )
-                            Text(
-                                text = "Nhập tên và biển số xe để cá nhân hóa hệ thống",
-                                color = c.textMuted,
-                                fontSize = font.xs
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = { dismissedVehicleBanner = true }) {
-                            Text("Để sau", color = c.textMuted, fontSize = font.xs)
-                        }
-                        Spacer(Modifier.width(6.dp))
-                        Button(
-                            onClick = onOpenVehicles,
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = c.primary,
-                                contentColor = c.textOnColor
-                            )
-                        ) {
-                            Text("Thiết lập ngay", fontSize = font.xs, fontWeight = font.semibold)
-                        }
-                    }
-                }
             }
         }
 
@@ -281,7 +207,7 @@ fun HomeScreen(
                         maxLines = 1
                     )
                     Text(
-                        text = if (state.isVehicleConfigured) "Bảo hộ AI tự động" else "Chạm để cài đặt",
+                        text = if (state.isVehicleConfigured) "Xe theo chuyến được giao" else "Chờ điều phối phân xe",
                         color = c.textSubtle,
                         fontSize = font.xs
                     )

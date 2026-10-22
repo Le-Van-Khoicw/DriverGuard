@@ -27,7 +27,7 @@ data class TripStop(val id: String, val kind: String, val address: String, val c
     val phone: String, val items: List<CargoItem>, val status: String, val quantities: List<Double> = emptyList(), val note: String = "")
 data class AssignedTrip(val id: String, val name: String, val driverId: String, val vehiclePlate: String,
     val dispatcherId: String, val start: Long, val end: Long, val status: String, val assignmentVersion: Long,
-    val stops: List<TripStop>, val updatedAt: Long)
+    val stops: List<TripStop>, val updatedAt: Long, val vehicleName: String = "")
 data class DriverLeave(val id: String, val start: Long, val end: Long, val reason: String, val status: String)
 data class DispatchState(val trips: List<AssignedTrip> = emptyList(), val busy: Boolean = false,
     val loaded: Boolean = false, val fromCache: Boolean = true, val pending: Int = 0,
@@ -64,6 +64,7 @@ class DispatchViewModel(application: Application) : AndroidViewModel(application
         if (next == uid && listener != null) return
         listener?.remove(); leaveListener?.remove(); worker?.cancel(); uid = next; serverTrips = emptyList(); rejected = false
         _state.value = DispatchState()
+        CompanyVehicleState.clear()
         if (uid.isBlank()) return
         try {
             val root = JSONObject(preferences.getString("account_$uid", null) ?: "{}")
@@ -190,6 +191,7 @@ class DispatchViewModel(application: Application) : AndroidViewModel(application
             }
             current
         }
+        CompanyVehicleState.update(projected)
         _state.value = _state.value.copy(trips = projected.sortedByDescending { it.start }, pending = queue.size, conflict = rejected)
     }
     override fun onCleared() { listener?.remove(); leaveListener?.remove(); worker?.cancel(); auth.removeAuthStateListener(authListener); super.onCleared() }
@@ -215,5 +217,5 @@ private fun decodeTrip(id: String, m: Map<String, Any?>): AssignedTrip {
             s["status"] as String, (s["quantities"] as? List<*>)?.map { (it as Number).toDouble() } ?: emptyList(), s["note"] as? String ?: "")
     } ?: emptyList()
     return AssignedTrip(id, m["name"] as String, m["driverId"] as String, m["vehiclePlate"] as String,
-        m["dispatcherId"] as String, number("start"), number("end"), m["status"] as String, number("assignmentVersion"), stops, number("updatedAt"))
+        m["dispatcherId"] as String, number("start"), number("end"), m["status"] as String, number("assignmentVersion"), stops, number("updatedAt"), m["vehicleName"] as? String ?: "")
 }
