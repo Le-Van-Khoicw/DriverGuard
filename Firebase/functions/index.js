@@ -222,7 +222,24 @@ export async function handleDispatchCommand(request) {
       }
       const schedule = clean((await tx.get(ref('resourceCalendars', `driver_${p.driverId}`))).data());
       if (p.status !== 'active' && Object.values(schedule.reservations).some(r => r.running)) fail('Cần bàn giao hoặc kết thúc chuyến đang chạy trước khi khóa');
-      tx.update(driverRef, { accountStatus: p.status, employeeCode: text(p.employeeCode, 'mã nhân viên', 40), updatedAt: now });
+      let employeeCode = d.data()?.employeeCode;
+      if (!employeeCode) {
+        const counterRef = ref('systemCounters', 'driverEmployeeCode');
+        const counter = await tx.get(counterRef);
+        // Bootstrap above legacy manual codes; serialize allocations through a shared counter.
+        const drivers = await tx.get(db.collection('drivers'));
+        let sequence = Number(counter.data()?.lastValue) || 0;
+        for (const driver of drivers.docs) {
+          const match = /^TX(\d+)$/i.exec(String(driver.data().employeeCode || ''));
+          if (match) sequence = Math.max(sequence, Number(match[1]));
+        }
+        if (!Number.isSafeInteger(sequence) || sequence >= 999999999) fail('Bộ đếm mã tài xế vượt giới hạn');
+        employeeCode = `TX${String(sequence + 1).padStart(3, '0')}`;
+        tx.set(counterRef, { lastValue: sequence + 1, updatedAt: now });
+      }
+      // Never trust a client-supplied code or reassign an existing driver's identity on status edits.
+      tx.update(driverRef, { accountStatus: p.status, employeeCode, updatedAt: now });
+      result.id = driverRef.id;
       return saveReceipt();
     }
     if (action === 'requestLeave') {
