@@ -4,6 +4,7 @@ import { db } from '../api/firebase';
 import { readDocument } from '../api/documentFiles';
 import { Driver, DriverDossier, FleetVehicle, qualificationLabel } from '../api/dispatch';
 import PhysicalDossierForm from './PhysicalDossierForm';
+import ErrorNotice from './ErrorNotice';
 
 const documentNames: Record<string, string> = {
   identity_front: 'Căn cước — mặt trước',
@@ -13,7 +14,7 @@ const documentNames: Record<string, string> = {
   health: 'Giấy khám / xác nhận sức khỏe'
 };
 
-export default function DriverProfileReview({ driver, admin, busy, error, review, recordPhysical, vehicles }: {
+export default function DriverProfileReview({ driver, admin, busy, review, recordPhysical, vehicles }: {
   vehicles: FleetVehicle[]; driver: Driver; admin: boolean; busy: boolean; error: string;
   review: (data: Record<string, unknown>) => void;
   recordPhysical: (data: Record<string, unknown>) => void;
@@ -110,7 +111,7 @@ export default function DriverProfileReview({ driver, admin, busy, error, review
         <p>Chưa có hồ sơ của {driver.displayName} để xét duyệt. Bấm nút bên dưới để ghi nhận hồ sơ bản giấy.</p>
       )}
 
-      {(readError || error) && <p role="alert" className="log-error">{readError || error}</p>}
+      <ErrorNotice message={readError} dismiss={() => setReadError('')} />
 
       {/* CẢNH BÁO KHI BỊ REJECTED */}
       {admin && isRejected && !recording && (

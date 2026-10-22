@@ -51,7 +51,12 @@ export default function PhysicalDossierForm({ driver, dossier, busy, save, cance
     <p className="account-help">Hồ sơ này dùng cho tài xế ô tô / xe tải: nhập hạn ghi trên GPLX và hồ sơ sức khỏe thực tế, không tự suy đoán từ ngày cấp.</p>
     <details><summary>Thông tin bổ sung (không bắt buộc)</summary>
       <div className="physical-dossier-grid">{extraFields.map(field => input(field, false))}
-        <label>Ghi chú / nơi lưu bản giấy<textarea rows={2} maxLength={1000} value={fields.receiptNote || ''} onChange={e => change('receiptNote', e.target.value)} placeholder="VD: Tủ hồ sơ tài xế, ngăn số 2" disabled={busy} /></label>
+        <label>Ghi chú / nơi lưu bản giấy
+          <select aria-label="Chọn nhanh nơi lưu bản giấy" value={['Lưu tại văn phòng công ty.', 'Lưu tại kho / bãi điều hành.'].includes(fields.receiptNote) ? fields.receiptNote : ''} onChange={e => change('receiptNote', e.target.value)} disabled={busy}>
+            <option value="">Khác / tự ghi bên dưới</option><option>Lưu tại văn phòng công ty.</option><option>Lưu tại kho / bãi điều hành.</option>
+          </select>
+          <textarea rows={2} maxLength={1000} value={fields.receiptNote || ''} onChange={e => change('receiptNote', e.target.value)} placeholder="VD: Tủ hồ sơ tài xế, ngăn số 2" disabled={busy} />
+        </label>
       </div>
     </details>
     <p className="account-help">Mã tiếp nhận: tự sinh khi lưu (VD: HS-000001).</p>

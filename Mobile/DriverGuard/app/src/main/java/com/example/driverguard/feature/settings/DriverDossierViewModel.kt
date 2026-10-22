@@ -113,6 +113,9 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
         _state.value = _state.value.copy(documents = _state.value.documents.filterNot { it.kind == kind }, dirty = true, error = null, message = "Đã bỏ tệp khỏi bản nháp. Hồ sơ đã nộp vẫn giữ cho đến khi nộp lại.")
         runCatching { saveDraft() }.onFailure { _state.value = _state.value.copy(error = it.message) }
     }
+    fun clearError() {
+        _state.value = _state.value.copy(error = null)
+    }
     fun fileSelectionError(message: String) {
         _state.value = _state.value.copy(error = message, message = null)
     }

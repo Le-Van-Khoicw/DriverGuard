@@ -1,4 +1,4 @@
-param([string]$Version = '1.0.3', [switch]$SkipBuild)
+param([string]$Version = '1.0.4', [switch]$SkipBuild)
 $ErrorActionPreference = 'Stop'
 if (-not $SkipBuild) { & (Join-Path $PSScriptRoot 'Build-OnlineAndroid.ps1') }
 & python (Join-Path $PSScriptRoot 'scripts\publish_android_release.py') $Version

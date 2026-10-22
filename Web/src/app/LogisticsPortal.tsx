@@ -5,6 +5,7 @@ import DriverManagement from './DriverManagement';
 import TripAssignmentForm, { driverAssignmentIssues } from './TripAssignmentForm';
 import DriverProfileReview from './DriverProfileReview';
 import AccountDirectory from './AccountDirectory';
+import ErrorNotice from './ErrorNotice';
 import StaffAccessForm from './StaffAccessForm';
 import TransportOrderForm from './TransportOrderForm';
 import FleetOverview from './FleetOverview';
@@ -31,6 +32,8 @@ export default function LogisticsPortal({ staff, logout }: { staff: Staff; logou
   const [leaves, setLeaves] = useState<Leave[]>([]), [reports, setReports] = useState<Report[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({}), [loaded, setLoaded] = useState<string[]>([]);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [errorNotice, setErrorNotice] = useState('');
+  useEffect(() => { if (error) setErrorNotice(error); }, [error]);
   const [dialog, setDialog] = useState<'order' | 'trip' | 'vehicle' | null>(null);
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null);
   const [editVehicle, setEditVehicle] = useState<FleetVehicle | null>(null);
@@ -71,7 +74,14 @@ export default function LogisticsPortal({ staff, logout }: { staff: Staff; logou
   const openDialog = (v: typeof dialog) => { setError(''); setDialog(v); };
   const unreadAlerts = alerts.filter(a => !a.status || a.status === 'NEW').length;
   function selectTab(key: Tab) { setTab(key); setSearch(''); setError(''); setMenu(false); }
-  return <div className="app-shell fleet-shell">
+  return <div className="app-shell fleet-shell" onInvalidCapture={event => {
+    const field = event.target as HTMLInputElement;
+    // Browsers fire invalid for every missing field; show the first one the browser focuses.
+    if (field.form?.querySelector(':invalid') !== field) return;
+    const label = field.labels?.[0]?.firstChild?.textContent?.trim() || 'Thông tin';
+    setErrorNotice(`${label}: ${field.validity.valueMissing ? 'Vui lòng điền hoặc chọn mục này.' : 'Giá trị chưa đúng, vui lòng kiểm tra lại.'}`);
+  }}>
+    <ErrorNotice message={errorNotice} dismiss={() => setErrorNotice('')} />
     {menu && <button className="sidebar-backdrop" onClick={() => setMenu(false)} aria-label="Đóng menu" />}
     <aside className={`sidebar ${menu ? 'sidebar-open' : ''}`}>
       <div className="sidebar-brand"><span className="brand-mark"><ShieldCheck /></span><div><strong>DrowsyGuard</strong><small>{admin ? 'Admin Portal' : 'Điều phối vận tải'}</small></div><button className="mobile-close" onClick={() => setMenu(false)} aria-label="Đóng menu"><X /></button></div>
@@ -91,7 +101,6 @@ export default function LogisticsPortal({ staff, logout }: { staff: Staff; logou
         {tab === 'dashboard' && <FleetOverview orders={orders} trips={trips} leaves={leaves} alerts={alerts} driverName={driverName} openAlerts={() => selectTab('alerts')} openTrips={() => selectTab('trips')} />}
       {loaded.length < 7 && !Object.keys(errors).length && <p role="status">Đang tải dữ liệu vận tải…</p>}
       {Object.entries(errors).map(([name, message]) => <div role="alert" className="log-error" key={name}>Không đọc được {name}: {message}</div>)}
-      {error && <div role="alert" className="log-error">{error}</div>}
       {tab !== 'dashboard' && <div className="log-toolbar"><input aria-label="Tìm kiếm" placeholder="Tìm mã, tên, địa chỉ…" value={search} onChange={e => setSearch(e.target.value)} />{tab === 'orders' && <button onClick={() => { openDialog('order'); }}>+ Tạo đơn</button>}{tab === 'trips' && <button onClick={() => { openDialog('trip'); }}>+ Lập và giao chuyến</button>}{tab === 'vehicles' && admin && <button onClick={() => { setEditVehicle(null); openDialog('vehicle'); }}>+ Thêm xe</button>}</div>}
 
       {tab === 'accounts' && admin && <AccountDirectory search={search} openDriver={uid => { setError(''); setSelectedDriverId(uid); }} grantStaff={account => { setStaffAccount(account); selectTab('staff'); }} />}

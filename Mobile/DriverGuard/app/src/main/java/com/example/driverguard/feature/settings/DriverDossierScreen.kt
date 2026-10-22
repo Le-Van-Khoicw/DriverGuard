@@ -3,6 +3,13 @@ package com.example.driverguard.feature.settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -42,6 +49,8 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
     var section by rememberSaveable { mutableStateOf("Thông tin cá nhân") }
     var confirmReload by remember { mutableStateOf(false) }
     var showOptional by rememberSaveable { mutableStateOf(false) }
+    var pickingLicense by rememberSaveable { mutableStateOf(false) }
+    var pickingDate by rememberSaveable { mutableStateOf<String?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && uploadKind.isNotBlank()) viewModel.upload(uploadKind, uri)
     }
@@ -64,7 +73,7 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
         if (state.reviewNote.isNotBlank()) Card { Text("Ghi chú quản lý: ${state.reviewNote}", Modifier.padding(12.dp)) }
         if (state.loading || state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (state.dirty) Text("Có bản nháp lưu trên máy, chưa phải hồ sơ được duyệt.", style = MaterialTheme.typography.bodySmall)
-        state.message?.let { Text(it) }; state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        state.message?.let { Text(it) }
         if (state.conflict) Text("Hồ sơ máy chủ đã thay đổi hoặc bản nháp có lỗi. Tải lại hồ sơ trước khi nộp.", color = MaterialTheme.colorScheme.error)
         TextButton(onClick = { showOptional = !showOptional }) { Text(if (showOptional) "Ẩn thông tin bổ sung" else "Thêm thông tin bổ sung (không bắt buộc)") }
         dossierFields.filter { showOptional || it.key in requiredDossierFields }.groupBy { it.group }.forEach { (group, fields) ->
@@ -73,7 +82,11 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
                     TextButton(onClick = { section = if (section == group) "" else group }) { Text("${if (section == group) "▾" else "▸"} $group (${fields.count { !state.fields[it.key].isNullOrBlank() }}/${fields.size})") }
                     if (section == group) fields.forEach { field ->
                         val isDate = field.key in dateFields
-                        OutlinedTextField(
+                        if (field.key == "licenseClass") {
+                            OutlinedButton(onClick = { pickingLicense = true }, enabled = !state.busy && !state.loading, modifier = Modifier.fillMaxWidth()) {
+                                Text(state.fields[field.key]?.takeIf { it.isNotBlank() }?.let { "Hạng GPLX: $it ▾" } ?: "Chọn hạng GPLX * ▾")
+                            }
+                        } else OutlinedTextField(
                             value = state.fields[field.key].orEmpty(),
                             onValueChange = { input ->
                                 val finalVal = if (isDate) formatDateInput(input, state.fields[field.key].orEmpty()) else input
@@ -81,6 +94,9 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
                             },
                             label = { Text(field.label + if (field.key in requiredDossierFields) " *" else " (không bắt buộc)") },
                             placeholder = { Text(field.example) },
+                            trailingIcon = if (isDate) {
+                                { IconButton(onClick = { pickingDate = field.key }, enabled = !state.busy && !state.loading) { Icon(Icons.Default.DateRange, contentDescription = "Chọn ngày trên lịch") } }
+                            } else null,
                             supportingText = if (isDate) {
                                 { Text("Định dạng: Ngày/Tháng/Năm (VD: 15/06/1995)") }
                             } else null,
@@ -96,20 +112,6 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
                                 }
                             )
                         )
-                        if (field.key == "licenseClass") {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                listOf("C" to "Hạng C (Chuẩn)", "B2" to "Hạng B2", "CE" to "Hạng CE", "C1" to "Hạng C1").forEach { (code, title) ->
-                                    FilterChip(
-                                        selected = state.fields["licenseClass"] == code,
-                                        onClick = { viewModel.edit("licenseClass", code) },
-                                        label = { Text(title) }
-                                    )
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -125,7 +127,7 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
                     Text("Đang xử lý, vui lòng chờ. Lần kết nối đầu tiên có thể lâu hơn.")
                 }
                 state.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+
                 dossierDocumentNames.forEach { (kind, name) ->
                     Text(name)
                     state.documents.find { it.kind == kind }?.let {
@@ -151,5 +153,36 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
         Button(onClick = viewModel::submit, enabled = !state.busy && !state.loading && !state.conflict && (state.dirty || state.status == "not_submitted"), modifier = Modifier.fillMaxWidth()) { Text(if (state.busy) "Đang xử lý…" else "Nộp hồ sơ cho quản lý") }
         OutlinedButton(onClick = { confirmReload = true }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Tải lại hồ sơ máy chủ") }
     }
+    state.error?.let { message ->
+        AlertDialog(onDismissRequest = viewModel::clearError, title = { Text("Chưa thực hiện được") },
+            text = { Text(message) }, confirmButton = { TextButton(onClick = viewModel::clearError) { Text("Đã hiểu") } })
+    }
+    if (pickingLicense) AlertDialog(onDismissRequest = { pickingLicense = false }, title = { Text("Chọn hạng GPLX") },
+        text = { Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+            Text("Chọn đúng hạng trên giấy phép. Mỗi hồ sơ ghi một hạng.")
+            val saved = state.fields["licenseClass"].orEmpty()
+            (listOf("B", "B2", "C1", "C", "BE", "C1E", "CE", "FC", "D1", "D2", "D", "E", "D1E", "D2E", "DE", "FB2", "FD", "FE") + listOf(saved).filter { it.isNotBlank() }).distinct().forEach { code ->
+                val choose = { viewModel.edit("licenseClass", code); pickingLicense = false }
+                Row(Modifier.fillMaxWidth().clickable(enabled = !state.busy, onClick = choose).padding(vertical = 4.dp)) {
+                    RadioButton(selected = saved == code, onClick = choose, enabled = !state.busy)
+                    Text("Hạng $code", Modifier.padding(top = 12.dp))
+                }
+            }
+        } }, confirmButton = { TextButton(onClick = { pickingLicense = false }) { Text("Đóng") } })
+    pickingDate?.let { key -> DossierDateDialog(value = state.fields[key].orEmpty(), dismiss = { pickingDate = null }, choose = { value -> viewModel.edit(key, value); pickingDate = null }) }
     if (confirmReload) AlertDialog(onDismissRequest = { confirmReload = false }, title = { Text("Tải lại hồ sơ?") }, text = { Text("Bản nháp chưa nộp trên máy sẽ được thay bằng hồ sơ máy chủ. Các giấy tờ đã nộp vẫn giữ.") }, confirmButton = { TextButton(onClick = { confirmReload = false; viewModel.reloadRemote() }) { Text("Tải lại") } }, dismissButton = { TextButton(onClick = { confirmReload = false }) { Text("Giữ bản nháp") } })
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DossierDateDialog(value: String, dismiss: () -> Unit, choose: (String) -> Unit) {
+    val format = DateTimeFormatter.ofPattern("dd/MM/uuuu")
+    val initial = runCatching { LocalDate.parse(value, format).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
+    val picker = rememberDatePickerState(initialSelectedDateMillis = initial)
+    DatePickerDialog(onDismissRequest = dismiss,
+        confirmButton = { TextButton(enabled = picker.selectedDateMillis != null, onClick = {
+            picker.selectedDateMillis?.let { choose(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().format(format)) }
+        }) { Text("Chọn ngày") } },
+        dismissButton = { TextButton(onClick = dismiss) { Text("Hủy") } }
+    ) { DatePicker(state = picker, title = { Text("Chọn ngày", Modifier.padding(16.dp)) }) }
 }
