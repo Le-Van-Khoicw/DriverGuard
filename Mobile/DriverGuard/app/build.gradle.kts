@@ -29,8 +29,8 @@ android {
         applicationId = "com.example.driverguard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 6
+        versionName = "1.0.5"
         buildConfigField("boolean", "FIREBASE_EMULATORS", localFirebase.toString())
         buildConfigField("String", "FIREBASE_EMULATOR_HOST", "\"$localFirebaseHost\"")
         buildConfigField("String", "DISPATCH_API_URL", "\"$dispatchApiUrl\"")
@@ -88,6 +88,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
     implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-functions")
     implementation("com.google.firebase:firebase-storage")

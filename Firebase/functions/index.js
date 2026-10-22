@@ -148,7 +148,7 @@ export async function handleDispatchCommand(request) {
         receiverPhone: text(p.receiverPhone, 'SĐT người nhận', 40), deliveryAddress: text(p.deliveryAddress, 'địa chỉ giao'),
         items: items.map(i => ({ name: text(i.name, 'tên hàng', 200), quantity: positive(i.quantity, 'Số lượng'), unit: text(i.unit, 'đơn vị', 30) })),
         weightKg: positive(p.weightKg, 'Khối lượng'), ...interval(p), note: String(p.note || '').slice(0, 1000),
-        status: 'ready', tripId: null, createdBy: uid, createdAt: now, updatedAt: now,
+        status: 'ready', tripId: null, createdBy: uid, createdByName: staff.displayName || '', createdByEmail: staff.email || '', createdAt: now, updatedAt: now,
       };
       tx.create(ref('transportOrders', operationId), order);
       return saveReceipt();
@@ -319,17 +319,20 @@ export async function handleDispatchCommand(request) {
         });
       }
       const reason = create ? 'Phân công ban đầu' : text(p.reason, 'lý do đổi tài xế');
-      const history = [...trip.history, { from: old?.driverId || null, to: driverId, by: uid, at: now, reason,
+      const history = [...trip.history, { from: old?.driverId || null, to: driverId, by: uid, byName: staff.displayName || '', byEmail: staff.email || '', at: now, reason,
         location: String(p.location || '').slice(0, 500), cargoNote: String(p.cargoNote || '').slice(0, 1000), version: trip.assignmentVersion + 1 }];
       if (history.length > 100) fail('Đã vượt giới hạn 100 lần bàn giao/chuyến');
       if (action === 'handover') { text(p.location, 'vị trí bàn giao'); text(p.cargoNote, 'tình trạng hàng'); }
       Object.assign(trip, { driverId, driverName: driverDoc.data().fullName || driverDoc.data().displayName || driverId,
-        vehiclePlate: vehicleDoc.data().plate, dispatcherId: uid, assignmentVersion: trip.assignmentVersion + 1,
+        vehiclePlate: vehicleDoc.data().plate, dispatcherId: uid, dispatcherName: staff.displayName || '', dispatcherEmail: staff.email || '', assignmentVersion: trip.assignmentVersion + 1,
         status: action === 'handover' ? 'handover_pending' : 'assigned', history, assignedAt: now });
       if (previousCalendarDoc) {
         const previous = clean(previousCalendarDoc.data()); delete previous.reservations[tripRef.id]; tx.set(previousCalendarDoc.ref, previous);
       }
       driverCalendar.reservations[tripRef.id] = period; vehicleCalendar.reservations[tripRef.id] = period;
+      tx.create(ref('pushJobs', `${tripRef.id}_${driverId}_${trip.assignmentVersion}`), {
+        driverId, tripId: tripRef.id, assignmentVersion: trip.assignmentVersion, state: 'pending',
+        createdAt: now, nextAt: now, attempts: 0, expiresAt: trip.end > now ? Math.min(trip.end, now + 86_400_000) : now + 86_400_000 });
       tx.create(ref('tripAssignments', `${tripRef.id}_${driverId}_${trip.assignmentVersion}`),
         { tripId: tripRef.id, driverId, assignmentVersion: trip.assignmentVersion, assignedAt: now, assignedBy: uid });
       if (create) for (const d of orderDocs) tx.update(d.ref, { tripId: tripRef.id, status: 'assigned', updatedAt: now });

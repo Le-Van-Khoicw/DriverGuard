@@ -92,6 +92,9 @@ class DispatchViewModel(application: Application) : AndroidViewModel(application
                 if (snapshot != null) {
                     serverTrips = snapshot.documents.mapNotNull { d -> runCatching { decodeTrip(d.id, d.data ?: emptyMap()) }.getOrNull() }
                     _state.value = _state.value.copy(loaded = true, fromCache = snapshot.metadata.isFromCache)
+                    if (!snapshot.metadata.isFromCache) serverTrips.filter { it.status in listOf("assigned", "handover_pending") }.take(5).forEach {
+                        com.example.driverguard.data.DriverPush.show(getApplication<Application>(), account, it.id, it.assignmentVersion)
+                    }
                     publish()
                 }
             }

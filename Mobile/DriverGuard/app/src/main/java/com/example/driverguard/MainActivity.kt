@@ -1,5 +1,8 @@
 package com.example.driverguard
 
+import android.content.Intent
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -24,6 +27,17 @@ import com.example.driverguard.core.theme.c
 import com.example.driverguard.navigation.AppNavigation
 
 class MainActivity : ComponentActivity() {
+    private var notificationTripId by mutableStateOf<String?>(null)
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        notificationTripId = intent.getStringExtra("notificationTripId")
+    }
+    override fun onResume() {
+        super.onResume()
+        com.example.driverguard.data.DriverPush.register(applicationContext)
+    }
+
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -34,6 +48,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        notificationTripId = intent.getStringExtra("notificationTripId")
         com.example.driverguard.feature.history.AlarmRepository.initialize(applicationContext)
 
         enableEdgeToEdge()
@@ -49,7 +64,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.c.bg
                 ) {
-                    AppNavigation()
+                    AppNavigation(notificationTripId = notificationTripId, onNotificationConsumed = { notificationTripId = null })
                 }
             }
         }

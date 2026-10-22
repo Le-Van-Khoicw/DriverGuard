@@ -1,3 +1,4 @@
+import { drainPushJobs } from './push-notifications.js';
 import { createServer } from 'node:http';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getAuth } from 'firebase-admin/auth';
@@ -49,7 +50,7 @@ const server = createServer(async (req, res) => {
   }
   const url = new URL(req.url, 'http://server');
   const pathname = url.pathname;
-  if (req.method === 'GET' && pathname === '/health') return send(res, 200, { status: 'ok', projectId: process.env.FIREBASE_PROJECT_ID || 'driverguard-854e5', mode: 'online', features: { physicalDossiers: true, automaticStaffCodes: true, compactDossiers: true, reviewerIdentity: true, automaticDriverCodes: true } });
+  if (req.method === 'GET' && pathname === '/health') return send(res, 200, { status: 'ok', projectId: process.env.FIREBASE_PROJECT_ID || 'driverguard-854e5', mode: 'online', features: { physicalDossiers: true, automaticStaffCodes: true, compactDossiers: true, reviewerIdentity: true, automaticDriverCodes: true, assignmentPush: true } });
   const handler = handlers[pathname];
   const documentRoute = pathname === '/driver-documents' && ['GET', 'POST'].includes(req.method);
   if (!documentRoute && (!handler || req.method !== 'POST')) return send(res, 404, { error: { status: 'NOT_FOUND', message: 'Endpoint not found' } });
@@ -83,6 +84,7 @@ const server = createServer(async (req, res) => {
     if (!data || typeof data !== 'object' || Array.isArray(data)) bad('Dữ liệu lệnh phải là object');
     const result = await handler({ data, auth: { uid: token.uid, token } });
     send(res, 200, { data: result });
+    void drainPushJobs();
   } catch (error) {
     if (error instanceof HttpsError) return send(res, codes[error.code] || 500, { error: error.toJSON() });
     // Log only error code, never request bodies (which may contain private dossiers).
@@ -100,6 +102,8 @@ async function readBody(req, limit) {
   }
   return Buffer.concat(chunks);
 }
+setInterval(() => { void drainPushJobs(); }, 30_000).unref();
+void drainPushJobs();
 server.requestTimeout = 30_000;
 server.headersTimeout = 15_000;
 server.listen(Number(process.env.PORT || 10000), '0.0.0.0', () => console.log('DriverGuard online API is listening'));

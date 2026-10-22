@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.driverguard.feature.auth.data.FirebaseAuthRepository
@@ -52,7 +53,7 @@ private object Routes {
 }
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(notificationTripId: String? = null, onNotificationConsumed: () -> Unit = {}) {
     val nav = rememberNavController()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -70,6 +71,14 @@ fun AppNavigation() {
         nav.navigate(route) {
             if (clear) popUpTo(nav.graph.startDestinationId) { inclusive = true }
             launchSingleTop = true
+        }
+    }
+    val currentEntry by nav.currentBackStackEntryAsState()
+    LaunchedEffect(notificationTripId, authState.canEnterApp, currentEntry?.destination?.route) {
+        val route = currentEntry?.destination?.route
+        if (notificationTripId != null && authState.canEnterApp && route in listOf(Routes.HOME, Routes.TRIPS, Routes.HISTORY, Routes.SETTINGS, Routes.PROFILE, Routes.DEVICES, Routes.VEHICLES, Routes.MONITORING)) {
+            go(Routes.TRIPS)
+            onNotificationConsumed()
         }
     }
     fun select(tab: MainTab) = go(when (tab) {

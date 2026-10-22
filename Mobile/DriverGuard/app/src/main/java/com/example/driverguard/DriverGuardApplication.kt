@@ -21,5 +21,6 @@ class DriverGuardApplication : Application() {
             FirebaseFunctions.getInstance("asia-southeast1").useEmulator(BuildConfig.FIREBASE_EMULATOR_HOST, 5001)
             com.google.firebase.storage.FirebaseStorage.getInstance().useEmulator(BuildConfig.FIREBASE_EMULATOR_HOST, 9199)
         }
+        com.example.driverguard.data.DriverPush.initialize(this)
     }
 }
