@@ -169,12 +169,12 @@ export default function DriverProfileReview({ driver, admin, busy, error, review
               ['Địa chỉ', dossier.address],
               ['Số căn cước', dossier.identityNumber],
               ['GPLX / hạng', `${dossier.licenseNumber} · Hạng ${dossier.licenseClass}`],
-              ['GPLX: ngày cấp / hết hạn', `${dossier.licenseIssuedDate} → ${dossier.licenseExpiresDate}`],
-              ['Sức khỏe: ngày khám / hạn quản lý', `${dossier.healthCheckedDate} → ${dossier.healthExpiresDate}`],
-              ['Liên hệ khẩn cấp', `${dossier.emergencyName} · ${dossier.emergencyPhone}`],
+              ['GPLX: ngày cấp / hết hạn', `${dossier.licenseIssuedDate || 'Chưa bổ sung ngày cấp'} → ${dossier.licenseExpiresDate}`],
+              ['Sức khỏe: ngày khám / hạn quản lý', `${dossier.healthCheckedDate || 'Chưa bổ sung ngày khám'} → ${dossier.healthExpiresDate}`],
+              ['Liên hệ khẩn cấp', [dossier.emergencyName, dossier.emergencyPhone].filter(Boolean).join(' · ')],
               ['Lần nộp', `v${dossier.revision} · ${new Date(dossier.submittedAt).toLocaleString('vi-VN')}`]
             ].map(([label, value]) => (
-              <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+              <div key={label}><dt>{label}</dt><dd>{value || 'Chưa bổ sung'}</dd></div>
             ))}
           </dl>
 

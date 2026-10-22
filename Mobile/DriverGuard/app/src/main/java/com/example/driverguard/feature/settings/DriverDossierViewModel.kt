@@ -154,7 +154,7 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
     fun submit() {
         val s = _state.value
         if (!stillOwner() || s.busy || s.loading || s.conflict) return
-        if (dossierFields.any { s.fields[it.key].isNullOrBlank() } || requiredDossierDocuments.any { kind -> s.documents.none { it.kind == kind } }) {
+        if (dossierFields.filter { it.key in requiredDossierFields }.any { s.fields[it.key].isNullOrBlank() } || requiredDossierDocuments.any { kind -> s.documents.none { it.kind == kind } }) {
             _state.value = s.copy(error = "Điền đủ thông tin và tải hai mặt GPLX trước khi nộp. Tệp căn cước/sức khỏe là tùy chọn."); return
         }
         val invalidDate = dateFields.any { key ->
@@ -221,6 +221,7 @@ val dossierFields = listOf(
     DossierField("emergencyName", "Người liên hệ khẩn cấp", "VD: Nguyễn Thị An — vợ", "Liên hệ khẩn cấp"),
     DossierField("emergencyPhone", "Điện thoại khẩn cấp", "VD: 0912345678", "Liên hệ khẩn cấp")
 )
+val requiredDossierFields = setOf("fullName", "phone", "licenseNumber", "licenseClass", "licenseExpiresDate", "healthExpiresDate")
 val requiredDossierDocuments = setOf("license_front", "license_back")
 val dossierDocumentNames = linkedMapOf("license_front" to "GPLX — mặt trước (bắt buộc)", "license_back" to "GPLX — mặt sau (bắt buộc)",
     "identity_front" to "Căn cước — mặt trước (tùy chọn)", "identity_back" to "Căn cước — mặt sau (tùy chọn)", "health" to "Giấy khám / xác nhận sức khỏe (tùy chọn)")

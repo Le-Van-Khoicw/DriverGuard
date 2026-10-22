@@ -77,13 +77,26 @@ export async function handleDispatchCommand(request) {
       const previous = previousSnap.data();
       if ((previous?.revision || 0) !== p.revision) fail('Hồ sơ đã thay đổi. Mở lại trước khi ghi nhận bản giấy.');
       if (p.receivedConfirmed !== true) fail('Cần xác nhận đã thực sự nhận bộ hồ sơ giấy');
-      const receiptCode = text(p.receiptCode, 'mã phiếu hoặc mã lưu hồ sơ giấy', 100);
-      const receiptNote = text(p.receiptNote, 'ghi chú tiếp nhận, nơi lưu bản giấy', 1000);
+      // The shared counter serializes admins; check legacy manual codes before allocating.
+      const counterRef = ref('systemCounters', 'physicalDossierReceipt');
+      const counter = await tx.get(counterRef);
+      let sequence = Number(counter.data()?.lastValue) || 0;
+      let receiptCode;
+      for (let attempt = 0; attempt < 100; attempt++) {
+        sequence++;
+        if (!Number.isSafeInteger(sequence) || sequence > 999999999) fail('Bộ đếm mã hồ sơ vượt giới hạn');
+        receiptCode = `HS-${String(sequence).padStart(6, '0')}`;
+        const existing = await tx.get(db.collection('driverDossiers').where('receiptCode', '==', receiptCode).limit(1));
+        if (existing.empty) break;
+        if (attempt === 99) fail('Chưa cấp được mã hồ sơ, vui lòng thử lại');
+      }
+      const receiptNote = p.receiptNote ? text(p.receiptNote, 'ghi chú tiếp nhận', 1000) : '';
       const fields = await validateDossier(p, driverId, now, { requireUploads: false });
       const submitted = { ...fields, driverId, revision: (previous?.revision || 0) + 1,
         status: 'submitted', submissionMethod: 'in_person', submittedAt: now,
         receivedBy: uid, receivedByName: String(staff.displayName || '').slice(0, 120), receivedAt: now,
         receiptCode, receiptNote, reviewedBy: null, reviewedAt: null, reviewNote: '' };
+      tx.set(counterRef, { lastValue: sequence, updatedAt: now });
       tx.set(dossierRef, submitted);
       tx.create(dossierRef.collection('revisions').doc(String(submitted.revision)), submitted);
       tx.update(targetRef, { displayName: fields.fullName, phone: fields.phone,

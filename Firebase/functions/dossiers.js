@@ -7,6 +7,7 @@ const required = (value, label, max = 300) => {
   return value.trim();
 };
 export const dossierDocuments = documentKinds;
+const optional = (value, label, max = 300) => value == null || value === '' ? '' : required(value, label, max);
 export function endOfVietnamDate(value, label) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) invalid(`${label}: dùng ngày yyyy-MM-dd`);
   const day = new Date(`${value}T00:00:00Z`);
@@ -16,14 +17,16 @@ export function endOfVietnamDate(value, label) {
 export async function validateDossier(p, uid, now, { requireUploads = true } = {}) {
   const fullName = required(p.fullName, 'họ tên', 120), phone = required(p.phone, 'điện thoại', 30);
   if (!/^\+?[0-9 ()-]{8,20}$/.test(phone)) invalid('Số điện thoại không hợp lệ');
-  const birth = endOfVietnamDate(p.birthDate, 'Ngày sinh');
-  if (birth >= now) invalid('Ngày sinh phải trước hôm nay');
-  const licenseIssuedAt = endOfVietnamDate(p.licenseIssuedDate, 'Ngày cấp GPLX');
+  const birthDate = optional(p.birthDate, 'ngày sinh');
+  if (birthDate && endOfVietnamDate(birthDate, 'Ngày sinh') >= now) invalid('Ngày sinh phải trước hôm nay');
+  const licenseIssuedDate = optional(p.licenseIssuedDate, 'ngày cấp GPLX');
+  const licenseIssuedAt = licenseIssuedDate ? endOfVietnamDate(licenseIssuedDate, 'Ngày cấp GPLX') : null;
   const licenseExpiresAt = endOfVietnamDate(p.licenseExpiresDate, 'Hạn GPLX');
-  const healthCheckedAt = endOfVietnamDate(p.healthCheckedDate, 'Ngày khám sức khỏe');
+  const healthCheckedDate = optional(p.healthCheckedDate, 'ngày khám sức khỏe');
+  const healthCheckedAt = healthCheckedDate ? endOfVietnamDate(healthCheckedDate, 'Ngày khám sức khỏe') : null;
   const healthExpiresAt = endOfVietnamDate(p.healthExpiresDate, 'Hạn hồ sơ sức khỏe');
-  if (licenseIssuedAt >= licenseExpiresAt || healthCheckedAt >= healthExpiresAt || licenseExpiresAt <= now || healthExpiresAt <= now) invalid('Kiểm tra lại ngày cấp/khám và hạn còn hiệu lực');
-  if (licenseIssuedAt - 86_400_000 + 1 > now || healthCheckedAt - 86_400_000 + 1 > now) invalid('Ngày cấp GPLX / ngày khám không được ở tương lai');
+  if ((licenseIssuedAt !== null && licenseIssuedAt >= licenseExpiresAt) || (healthCheckedAt !== null && healthCheckedAt >= healthExpiresAt) || licenseExpiresAt <= now || healthExpiresAt <= now) invalid('Kiểm tra lại ngày cấp/khám và hạn còn hiệu lực');
+  if ((licenseIssuedAt !== null && licenseIssuedAt - 86_400_000 + 1 > now) || (healthCheckedAt !== null && healthCheckedAt - 86_400_000 + 1 > now)) invalid('Ngày cấp GPLX / ngày khám không được ở tương lai');
   // Only the admin-only physical-receipt handler disables uploads; never trust a client flag.
   const docs = requireUploads ? p.documents : [];
   if (!Array.isArray(docs) || docs.length > dossierDocuments.length || docs.some(d => !d || !dossierDocuments.includes(d.kind)) ||
@@ -36,15 +39,15 @@ export async function validateDossier(p, uid, now, { requireUploads = true } = {
     const metadata = await documentMetadata(path);
     return { kind, path, name: required(document.name, 'tên tệp', 180), contentType: metadata.contentType, size: Number(metadata.size) };
   }));
-  const emergencyPhone = required(p.emergencyPhone, 'điện thoại khẩn cấp', 30);
-  if (!/^\+?[0-9 ()-]{8,20}$/.test(emergencyPhone)) invalid('Số điện thoại khẩn cấp không hợp lệ');
+  const emergencyPhone = optional(p.emergencyPhone, 'điện thoại khẩn cấp', 30);
+  if (emergencyPhone && !/^\+?[0-9 ()-]{8,20}$/.test(emergencyPhone)) invalid('Số điện thoại khẩn cấp không hợp lệ');
   return {
-    fullName, phone, birthDate: p.birthDate, address: required(p.address, 'địa chỉ'),
-    identityNumber: required(p.identityNumber, 'số căn cước', 30), licenseNumber: required(p.licenseNumber, 'số GPLX', 50),
+    fullName, phone, birthDate, address: optional(p.address, 'địa chỉ'),
+    identityNumber: optional(p.identityNumber, 'số căn cước', 30), licenseNumber: required(p.licenseNumber, 'số GPLX', 50),
     licenseClass: required(p.licenseClass, 'hạng GPLX (ghi đúng trên giấy)', 30),
-    licenseIssuedDate: p.licenseIssuedDate, licenseExpiresDate: p.licenseExpiresDate,
-    healthCheckedDate: p.healthCheckedDate, healthExpiresDate: p.healthExpiresDate,
-    licenseExpiresAt, healthExpiresAt, emergencyName: required(p.emergencyName, 'liên hệ khẩn cấp', 120),
+    licenseIssuedDate, licenseExpiresDate: p.licenseExpiresDate,
+    healthCheckedDate, healthExpiresDate: p.healthExpiresDate,
+    licenseExpiresAt, healthExpiresAt, emergencyName: optional(p.emergencyName, 'liên hệ khẩn cấp', 120),
     emergencyPhone, documents,
   };
 }

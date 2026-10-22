@@ -41,6 +41,7 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
     var uploadKind by rememberSaveable { mutableStateOf("") }
     var section by rememberSaveable { mutableStateOf("Thông tin cá nhân") }
     var confirmReload by remember { mutableStateOf(false) }
+    var showOptional by rememberSaveable { mutableStateOf(false) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && uploadKind.isNotBlank()) viewModel.upload(uploadKind, uri)
     }
@@ -65,7 +66,8 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
         if (state.dirty) Text("Có bản nháp lưu trên máy, chưa phải hồ sơ được duyệt.", style = MaterialTheme.typography.bodySmall)
         state.message?.let { Text(it) }; state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (state.conflict) Text("Hồ sơ máy chủ đã thay đổi hoặc bản nháp có lỗi. Tải lại hồ sơ trước khi nộp.", color = MaterialTheme.colorScheme.error)
-        dossierFields.groupBy { it.group }.forEach { (group, fields) ->
+        TextButton(onClick = { showOptional = !showOptional }) { Text(if (showOptional) "Ẩn thông tin bổ sung" else "Thêm thông tin bổ sung (không bắt buộc)") }
+        dossierFields.filter { showOptional || it.key in requiredDossierFields }.groupBy { it.group }.forEach { (group, fields) ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     TextButton(onClick = { section = if (section == group) "" else group }) { Text("${if (section == group) "▾" else "▸"} $group (${fields.count { !state.fields[it.key].isNullOrBlank() }}/${fields.size})") }
@@ -77,7 +79,7 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
                                 val finalVal = if (isDate) formatDateInput(input, state.fields[field.key].orEmpty()) else input
                                 viewModel.edit(field.key, finalVal)
                             },
-                            label = { Text(field.label) },
+                            label = { Text(field.label + if (field.key in requiredDossierFields) " *" else " (không bắt buộc)") },
                             placeholder = { Text(field.example) },
                             supportingText = if (isDate) {
                                 { Text("Định dạng: Ngày/Tháng/Năm (VD: 15/06/1995)") }
