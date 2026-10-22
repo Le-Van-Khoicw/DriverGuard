@@ -13,6 +13,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
+private fun formatDateInput(input: String, previous: String = ""): String {
+    if (input.length < previous.length) {
+        var digits = input.filter { it.isDigit() }
+        if (previous.endsWith('/') && digits.isNotEmpty()) {
+            digits = digits.dropLast(1)
+        }
+        return when {
+            digits.length > 4 -> "${digits.substring(0, 2)}/${digits.substring(2, 4)}/${digits.substring(4)}"
+            digits.length > 2 -> "${digits.substring(0, 2)}/${digits.substring(2)}"
+            else -> digits
+        }
+    }
+    val digits = input.filter { it.isDigit() }.take(8)
+    return when {
+        digits.length > 4 -> "${digits.substring(0, 2)}/${digits.substring(2, 4)}/${digits.substring(4)}"
+        digits.length == 4 -> "${digits.substring(0, 2)}/${digits.substring(2, 4)}/"
+        digits.length > 2 -> "${digits.substring(0, 2)}/${digits.substring(2)}"
+        digits.length == 2 -> "${digits.substring(0, 2)}/"
+        else -> digits
+    }
+}
+
 @Composable
 fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
     val state by viewModel.state.collectAsState()
@@ -48,10 +70,44 @@ fun DriverDossierScreen(viewModel: DriverDossierViewModel, onBack: () -> Unit) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     TextButton(onClick = { section = if (section == group) "" else group }) { Text("${if (section == group) "▾" else "▸"} $group (${fields.count { !state.fields[it.key].isNullOrBlank() }}/${fields.size})") }
                     if (section == group) fields.forEach { field ->
-                        OutlinedTextField(value = state.fields[field.key].orEmpty(), onValueChange = { viewModel.edit(field.key, it) },
-                            label = { Text(field.label) }, placeholder = { Text(field.example) }, modifier = Modifier.fillMaxWidth(),
-                            enabled = !state.busy && !state.loading, singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = when(field.key) { "phone", "emergencyPhone" -> KeyboardType.Phone; "identityNumber", "licenseNumber" -> KeyboardType.Number; else -> KeyboardType.Text }))
+                        val isDate = field.key in dateFields
+                        OutlinedTextField(
+                            value = state.fields[field.key].orEmpty(),
+                            onValueChange = { input ->
+                                val finalVal = if (isDate) formatDateInput(input, state.fields[field.key].orEmpty()) else input
+                                viewModel.edit(field.key, finalVal)
+                            },
+                            label = { Text(field.label) },
+                            placeholder = { Text(field.example) },
+                            supportingText = if (isDate) {
+                                { Text("Định dạng: Ngày/Tháng/Năm (VD: 15/06/1995)") }
+                            } else null,
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !state.busy && !state.loading,
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = when {
+                                    isDate -> KeyboardType.Number
+                                    field.key in setOf("phone", "emergencyPhone") -> KeyboardType.Phone
+                                    field.key in setOf("identityNumber", "licenseNumber") -> KeyboardType.Number
+                                    else -> KeyboardType.Text
+                                }
+                            )
+                        )
+                        if (field.key == "licenseClass") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                listOf("C" to "Hạng C (Chuẩn)", "B2" to "Hạng B2", "CE" to "Hạng CE", "C1" to "Hạng C1").forEach { (code, title) ->
+                                    FilterChip(
+                                        selected = state.fields["licenseClass"] == code,
+                                        onClick = { viewModel.edit("licenseClass", code) },
+                                        label = { Text(title) }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

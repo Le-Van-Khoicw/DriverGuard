@@ -62,7 +62,8 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
                 val root = JSONObject(raw)
                 val fields = root.getJSONObject("fields")
                 val files = root.getJSONArray("documents")
-                _state.value = _state.value.copy(fields = fields.keys().asSequence().associateWith { fields.getString(it) },
+                val rawMap = fields.keys().asSequence().associateWith { fields.getString(it) }
+                _state.value = _state.value.copy(fields = rawMap.mapValues { (k, v) -> if (k in dateFields) toDisplayDate(v) else v },
                     documents = (0 until files.length()).map { val f = files.getJSONObject(it); DossierFile(f.getString("kind"), f.getString("path"), f.getString("name")) },
                     revision = root.optLong("revision"), dirty = true)
                 operationId = root.optString("operationId").takeIf { it.isNotBlank() }
@@ -76,7 +77,7 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
         _state.value = DriverDossierState(
             fields = dossierFields.associate { it.key to (remote?.get(it.key) as? String ?: when(it.key) {
                 "fullName" -> authUser?.displayName.orEmpty(); else -> ""
-            }) }, documents = docs.map { DossierFile(it["kind"] as String, it["path"] as String, it["name"] as String) },
+            }).let { v -> if (it.key in dateFields) toDisplayDate(v) else v } }, documents = docs.map { DossierFile(it["kind"] as String, it["path"] as String, it["name"] as String) },
             revision = (remote?.get("revision") as? Number)?.toLong() ?: 0,
             status = remote?.get("status") as? String ?: "not_submitted", reviewNote = remote?.get("reviewNote") as? String ?: "", loading = false,
             submissionMethod = remote?.get("submissionMethod") as? String ?: "online",
@@ -156,12 +157,20 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
         if (dossierFields.any { s.fields[it.key].isNullOrBlank() } || requiredDossierDocuments.any { kind -> s.documents.none { it.kind == kind } }) {
             _state.value = s.copy(error = "Điền đủ thông tin và tải hai mặt GPLX trước khi nộp. Tệp căn cước/sức khỏe là tùy chọn."); return
         }
+        val invalidDate = dateFields.any { key ->
+            val v = s.fields[key].orEmpty().trim()
+            v.isNotBlank() && !v.matches(Regex("""^\d{2}/\d{2}/\d{4}$""")) && !v.matches(Regex("""^\d{4}-\d{2}-\d{2}$"""))
+        }
+        if (invalidDate) {
+            _state.value = s.copy(error = "Vui lòng nhập ngày theo đúng định dạng ngày/tháng/năm (VD: 15/06/1995)."); return
+        }
         operationId = operationId ?: UUID.randomUUID().toString()
         runCatching { saveDraft() }.onFailure { _state.value = s.copy(error = it.message); return }
         _state.value = s.copy(busy = true, error = null, message = "Đang nộp hồ sơ…")
         viewModelScope.launch {
             try {
-                val request = s.fields + mapOf("action" to "submitDriverDossier", "operationId" to operationId, "revision" to s.revision,
+                val convertedFields = s.fields.mapValues { (k, v) -> if (k in dateFields) toIsoDate(v) else v }
+                val request = convertedFields + mapOf("action" to "submitDriverDossier", "operationId" to operationId, "revision" to s.revision,
                     "documents" to s.documents.map { mapOf("kind" to it.kind, "path" to it.path, "name" to it.name) })
                 withTimeout(100_000) { BusinessFunctions.command().call(request).await() }
                 val confirmed = doc.get(Source.SERVER).await()
@@ -176,19 +185,39 @@ class DriverDossierViewModel(application: Application) : AndroidViewModel(applic
     override fun onCleared() { listener.remove(); super.onCleared() }
 }
 
+val dateFields = setOf("birthDate", "licenseIssuedDate", "licenseExpiresDate", "healthCheckedDate", "healthExpiresDate")
+
+fun toDisplayDate(value: String): String {
+    val trimmed = value.trim()
+    val parts = trimmed.split("-")
+    if (parts.size == 3 && parts[0].length == 4 && parts[1].length == 2 && parts[2].length == 2) {
+        return "${parts[2]}/${parts[1]}/${parts[0]}"
+    }
+    return trimmed
+}
+
+fun toIsoDate(value: String): String {
+    val trimmed = value.trim()
+    val parts = trimmed.split("/")
+    if (parts.size == 3 && parts[0].length == 2 && parts[1].length == 2 && parts[2].length == 4) {
+        return "${parts[2]}-${parts[1]}-${parts[0]}"
+    }
+    return trimmed
+}
+
 data class DossierField(val key: String, val label: String, val example: String, val group: String)
 val dossierFields = listOf(
     DossierField("fullName", "Họ tên theo giấy tờ", "VD: Nguyễn Văn Nam", "Thông tin cá nhân"),
     DossierField("phone", "Điện thoại", "VD: 0901234567", "Thông tin cá nhân"),
-    DossierField("birthDate", "Ngày sinh", "yyyy-MM-dd, VD: 1995-06-15", "Thông tin cá nhân"),
+    DossierField("birthDate", "Ngày sinh", "VD: 15/06/1995", "Thông tin cá nhân"),
     DossierField("address", "Địa chỉ liên hệ", "VD: 12 Nguyễn Trãi, TP.HCM", "Thông tin cá nhân"),
     DossierField("identityNumber", "Số căn cước", "Nhập đúng trên giấy tờ", "Thông tin cá nhân"),
     DossierField("licenseNumber", "Số giấy phép lái xe", "Nhập đúng trên GPLX", "Giấy phép và sức khỏe"),
     DossierField("licenseClass", "Hạng GPLX", "VD: C1, C, CE; ghi đúng trên giấy", "Giấy phép và sức khỏe"),
-    DossierField("licenseIssuedDate", "Ngày cấp GPLX", "yyyy-MM-dd", "Giấy phép và sức khỏe"),
-    DossierField("licenseExpiresDate", "GPLX có giá trị đến ngày", "yyyy-MM-dd", "Giấy phép và sức khỏe"),
-    DossierField("healthCheckedDate", "Ngày khám sức khỏe", "yyyy-MM-dd", "Giấy phép và sức khỏe"),
-    DossierField("healthExpiresDate", "Hạn hồ sơ sức khỏe theo giấy / yêu cầu công ty", "yyyy-MM-dd; quản lý đối chiếu", "Giấy phép và sức khỏe"),
+    DossierField("licenseIssuedDate", "Ngày cấp GPLX", "VD: 20/10/2020", "Giấy phép và sức khỏe"),
+    DossierField("licenseExpiresDate", "GPLX có giá trị đến ngày", "VD: 20/10/2025", "Giấy phép và sức khỏe"),
+    DossierField("healthCheckedDate", "Ngày khám sức khỏe", "VD: 01/06/2024", "Giấy phép và sức khỏe"),
+    DossierField("healthExpiresDate", "Hạn hồ sơ sức khỏe theo giấy / yêu cầu công ty", "VD: 01/06/2025", "Giấy phép và sức khỏe"),
     DossierField("emergencyName", "Người liên hệ khẩn cấp", "VD: Nguyễn Thị An — vợ", "Liên hệ khẩn cấp"),
     DossierField("emergencyPhone", "Điện thoại khẩn cấp", "VD: 0912345678", "Liên hệ khẩn cấp")
 )
