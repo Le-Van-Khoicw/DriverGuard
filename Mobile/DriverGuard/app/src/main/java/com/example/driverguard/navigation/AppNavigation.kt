@@ -182,24 +182,57 @@ fun AppNavigation(notificationTripId: String? = null, onNotificationConsumed: ()
             )
         }
         composable(Routes.HOME) {
+            val assignedTrip = dispatchState.trips.firstOrNull { it.status in listOf("assigned", "accepted", "in_progress") }
             MainScaffold(MainTab.HOME, ::select) {
                 HomeScreen(
                     onStartMonitoring = { go(Routes.TRIPS) },
                     onOpenHistory = { go(Routes.HISTORY) },
-                    onOpenVehicles = { go(Routes.VEHICLES) }
+                    onOpenVehicles = { go(Routes.VEHICLES) },
+                    activeTrip = assignedTrip,
+                    onOpenTrips = { go(Routes.TRIPS) }
                 )
             }
         }
         composable(Routes.TRIPS) {
             MainScaffold(MainTab.TRIPS, ::select) {
-                DispatchScreen(dispatch, onMonitor = { trip ->
-                    if (monitoring.bindDispatchTrip(trip.id, trip.assignmentVersion)) go(Routes.MONITORING)
-                    else go(Routes.MONITORING)
-                }, onFinishMonitoring = { trip -> monitoring.closeForDispatch(trip.id, trip.assignmentVersion) })
+                DispatchScreen(
+                    viewModel = dispatch,
+                    onMonitor = { trip ->
+                        monitoring.bindDispatchTrip(trip.id, trip.assignmentVersion)
+                        monitoring.startMonitoring()
+                        go(Routes.MONITORING)
+                    },
+                    onFinishMonitoring = { trip -> monitoring.closeForDispatch(trip.id, trip.assignmentVersion) },
+                    onStartTrip = { trip ->
+                        // Server đã xác nhận startTrip → bind giám sát + tự kích hoạt AI và mở màn Giám sát
+                        monitoring.bindDispatchTrip(trip.id, trip.assignmentVersion)
+                        monitoring.startMonitoring()
+                        go(Routes.MONITORING)
+                    },
+                    monitoringLinkedTripId = if (monitoringState.hasActiveTrip) monitoringState.dispatchTripId else null,
+                    currentGps = monitoringState.gpsLocation
+                )
             }
         }
         composable(Routes.MONITORING) {
-            MainScaffold(MainTab.MONITORING, ::select) { MonitoringScreen(monitoring) }
+            val activeTrip = dispatchState.trips.find { it.id == monitoringState.dispatchTripId }
+            MainScaffold(MainTab.MONITORING, ::select) {
+                MonitoringScreen(
+                    viewModel = monitoring,
+                    activeTrip = activeTrip,
+                    onRecordStop = { stop, outcome, quantities, contact, note ->
+                        if (activeTrip != null) {
+                            dispatch.recordStop(activeTrip, stop, outcome, quantities, contact, note)
+                        }
+                    },
+                    onFinishTrip = { reason ->
+                        if (activeTrip != null) {
+                            dispatch.finishTrip(activeTrip, reason)
+                            monitoring.closeForDispatch(activeTrip.id, activeTrip.assignmentVersion)
+                        }
+                    }
+                )
+            }
         }
         composable(Routes.HISTORY) {
             MainScaffold(MainTab.HISTORY, ::select) { HistoryScreen { go("alert/$it") } }

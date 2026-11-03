@@ -1,4 +1,15 @@
-package com.example.driverguard.feature.auth.monitoring
+﻿package com.example.driverguard.feature.auth.monitoring
+
+import android.annotation.SuppressLint
+import android.view.MotionEvent
+import android.view.ViewGroup
+import android.webkit.GeolocationPermissions
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import java.net.URLEncoder
+import com.example.driverguard.core.location.GpsLocation
 
 import android.Manifest
 import android.app.Activity
@@ -12,10 +23,12 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +46,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Analytics
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.PictureInPictureAlt
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -42,8 +56,17 @@ import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.Navigation
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ButtonDefaults
@@ -52,23 +75,43 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.BoundingBox
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.util.MapTileIndex
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Polyline
+import com.example.driverguard.feature.dispatch.resolveStopLocation
+import com.example.driverguard.feature.dispatch.AssignedTrip
+import com.example.driverguard.feature.dispatch.TripStop
+import com.example.driverguard.feature.dispatch.openInAppNavigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -81,7 +124,14 @@ import com.example.driverguard.feature.monitoring.TripSummaryDialog
 import java.util.concurrent.Executors
 
 @Composable
-fun MonitoringScreen(viewModel: MonitoringViewModel) {
+fun MonitoringScreen(
+    viewModel: MonitoringViewModel,
+    activeTrip: AssignedTrip? = null,
+    onRecordStop: ((TripStop, String, List<Double>, String, String) -> Unit)? = null,
+    onFinishTrip: ((String) -> Unit)? = null
+) {
+    var editingActiveStop by remember { mutableStateOf<TripStop?>(null) }
+    var showFinishActiveTripDialog by remember { mutableStateOf(false) }
     val c = MaterialTheme.c
     val font = MaterialTheme.font
     val state by viewModel.uiState.collectAsState()
@@ -130,9 +180,9 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
         PipManager.isMonitoringActive = isRunning
     }
 
-    // Bật/tắt GPS Tracker theo trạng thái giám sát
-    DisposableEffect(isRunning, hasLocationPermission) {
-        if (isRunning && hasLocationPermission) {
+    // Bật/tắt GPS Tracker khi có quyền vị trí (cập nhật vị trí thực tế ngay cả khi chưa bấm bắt đầu)
+    DisposableEffect(hasLocationPermission) {
+        if (hasLocationPermission) {
             locationTracker.startTracking()
         }
         onDispose {
@@ -360,120 +410,221 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
             }
         }
 
-        // ── Khung Camera Preview ──
+        // ── KHUNG BẢN ĐỒ DẪN ĐƯỜNG NATIVE OPENSTREETMAP (CON ĐƯỜNG 1 - CHUẨN GRAB) ──
+        var showCameraCheckModal by remember { mutableStateOf(false) }
+        val nextStop = activeTrip?.stops?.firstOrNull { it.status == "pending" }
+        val targetAddress = nextStop?.address
+        val currentGps = state.gpsLocation
+
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(260.dp),
+                .height(460.dp),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = c.card),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                if (isRunning && hasCameraPermission) {
-                    CameraPreview(
-                        onEar = viewModel::onEarDetected,
-                        onError = viewModel::onCameraError,
-                        modifier = Modifier.fillMaxSize()
-                    )
-
-                    // Overlay chỉ báo Live
-                    Box(
-                        modifier = Modifier
-                            .padding(12.dp)
-                            .align(Alignment.TopStart)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black.copy(alpha = 0.6f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(c.safe)
-                            )
-                            Text(
-                                "AI FACE MESH LIVE",
-                                color = Color.White,
-                                fontSize = font.xs,
-                                fontWeight = font.bold
-                            )
-                        }
-                    }
-
-                    // ── Overlay Đếm ngược & Hướng dẫn khi Đang Hiệu Chỉnh (5 giây) ──
-                    if (state.status == MonitoringStatus.CALIBRATING) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.55f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(56.dp)
-                                        .clip(CircleShape)
-                                        .background(c.primary),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        "${state.calibrationSecondsLeft}s",
-                                        color = Color.White,
-                                        fontSize = font.xl,
-                                        fontWeight = font.black
-                                    )
+                // 1. BẢN ĐỒ NATIVE OPENSTREETMAP (Sạch 100%, có xe 🚗 và lộ trình nối các kho)
+                NativeMonitoringMapView(
+                    stops = activeTrip?.stops ?: emptyList(),
+                    activeStop = nextStop,
+                    currentGps = currentGps,
+                    onOpenVoiceNavigation = if (targetAddress.isNullOrBlank()) null else {
+                        {
+                            try {
+                                val uri = android.net.Uri.parse("google.navigation:q=" + android.net.Uri.encode(targetAddress))
+                                val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri).apply {
+                                    setPackage("com.google.android.apps.maps")
                                 }
-                                Text(
-                                    "NHÌN THẲNG VÀO CAMERA",
-                                    color = Color.White,
-                                    fontSize = font.md,
-                                    fontWeight = font.black,
-                                    letterSpacing = 1.sp
-                                )
-                                Text(
-                                    "Giữ mắt mở tự nhiên để AI đo ngưỡng cá nhân",
-                                    color = Color.White.copy(alpha = 0.9f),
-                                    fontSize = font.xs,
-                                    textAlign = TextAlign.Center
-                                )
+                                context.startActivity(mapIntent)
+                            } catch (_: Exception) {
+                                val browserUri = android.net.Uri.parse("https://www.google.com/maps/dir/?api=1&destination=" + android.net.Uri.encode(targetAddress))
+                                context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, browserUri))
                             }
                         }
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // 2. CHIP ĐIỂM TIẾP THEO (Góc trên bên trái bản đồ)
+                Surface(
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .align(Alignment.TopStart),
+                    color = Color.Black.copy(alpha = 0.75f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        Icon(
+                            Icons.Outlined.Navigation,
+                            contentDescription = null,
+                            tint = c.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
                         Text(
-                            text = "DriverGuard Vision AI",
-                            color = c.text,
-                            fontSize = font.lg,
+                            text = if (targetAddress != null) {
+                                val shortAddr = if (targetAddress.length > 25) targetAddress.take(23) + "…" else targetAddress
+                                "Tới: $shortAddr"
+                            } else {
+                                "Lộ trình dẫn đường"
+                            },
+                            color = Color.White,
+                            fontSize = font.xs,
                             fontWeight = font.bold
                         )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = "Bấm 'Bắt đầu giám sát' hoặc 'Tiếp tục giám sát' để kích hoạt camera AI\nvà phát hiện dấu hiệu buồn ngủ thời gian thực",
-                            color = c.textMuted,
-                            fontSize = font.xs,
-                            textAlign = TextAlign.Center
+                    }
+                }
+
+                // 3. NÚT ĐÈN BÁO AI LIVE + CHẠM ĐỂ XEM GÓC SOI CAMERA (Góc trên bên phải)
+
+                Surface(
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = 72.dp)
+                        .clickable { showCameraCheckModal = true },
+                    color = Color.Black.copy(alpha = 0.75f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (state.status == MonitoringStatus.DROWSY) c.danger else if (isRunning) c.safe else Color.Gray)
                         )
+                        Text(
+                            text = if (state.ear != null) "AI: ${"%.2f".format(state.ear)}" else if (isRunning) "AI LIVE" else "AI CHỜ",
+                            color = Color.White,
+                            fontSize = font.xs,
+                            fontWeight = font.bold
+                        )
+                        Icon(
+                            Icons.Outlined.Visibility,
+                            contentDescription = "Kiểm tra góc soi",
+                            tint = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+
+                // 5. CAMERA AI CHẠY NGẦM 100% (ẨN HOÀN TOÀN KHỎI GIAO DIỆN BẢN ĐỒ)
+                if (isRunning && hasCameraPermission && !showCameraCheckModal) {
+                    Box(
+                        modifier = Modifier
+                            .size(1.dp)
+                            .alpha(0.001f)
+                    ) {
+                        CameraPreview(
+                            onEar = viewModel::onEarDetected,
+                            onError = viewModel::onCameraError,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                // 6. CẢNH BÁO BUỒN NGỦ ĐÈ LÊN TOÀN BẢN ĐỒ (CHỚP ĐỎ TOÀN BỘ KHI DROWSY)
+                if (state.status == MonitoringStatus.DROWSY) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(c.danger.copy(alpha = 0.8f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.WarningAmber,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Text(
+                                "🚨 PHÁT HIỆN BUỒN NGỦ!",
+                                color = Color.White,
+                                fontSize = font.xl,
+                                fontWeight = font.black,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                "MẮT ĐÃ NHẮM KÉO DÀI!\nHÃY TẮP XE VÀ NGHỈ NGƠI NGAY LẬP TỨC!",
+                                color = Color.White,
+                                fontSize = font.sm,
+                                fontWeight = font.bold,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // ── Thanh tiến trình hiệu chỉnh EAR (5 giây đầu) ──
+        // ── MODAL KIỂM TRA GÓC SOI CAMERA KHI TÀI XẾ CẦN CĂN CHỈNH ──
+        if (showCameraCheckModal) {
+            AlertDialog(
+                onDismissRequest = { showCameraCheckModal = false },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Outlined.Visibility, contentDescription = null, tint = c.primary)
+                        Text("Kiểm tra góc camera AI", fontSize = font.md, fontWeight = font.bold)
+                    }
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color.Black)
+                        ) {
+                            if (hasCameraPermission) {
+                                CameraPreview(
+                                    onEar = viewModel::onEarDetected,
+                                    onError = viewModel::onCameraError,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                        Text(
+                            "Căn chỉnh giá đỡ sao cho khuôn mặt nằm rõ trong khung hình để AI nhận diện chớp mắt chính xác nhất.",
+                            fontSize = font.xs,
+                            color = c.textMuted,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { showCameraCheckModal = false },
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Đã căn chỉnh xong (Ẩn camera)", fontSize = font.sm, fontWeight = font.bold)
+                    }
+                }
+            )
+        }
+
+        // ── Thanh tiến trình hiệu chỉnh EAR (5 giây đầu khi bắt đầu) ──
         if (state.status == MonitoringStatus.CALIBRATING) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -487,7 +638,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "🎯 Đang hiệu chỉnh EAR cơ sở: còn ${state.calibrationSecondsLeft}s",
+                            "🎯 Đang hiệu chỉnh khuôn mặt: còn ${state.calibrationSecondsLeft}s",
                             color = c.primary,
                             fontSize = font.sm,
                             fontWeight = font.bold
@@ -509,7 +660,7 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                         trackColor = c.card
                     )
                     Text(
-                        "Hãy nhìn thẳng kính lái và giữ mắt mở tự nhiên",
+                        "Vui lòng nhìn thẳng vào camera và mở mắt tự nhiên để AI tính toán ngưỡng EAR",
                         color = c.primaryText,
                         fontSize = font.xs
                     )
@@ -517,45 +668,152 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
             }
         }
 
-        // ── Thông báo hiệu chỉnh thành công (Hiển thị ngưỡng cá nhân) ──
-        if (state.status == MonitoringStatus.MONITORING && state.earBaseline != null) {
+        // ── CẢNH BÁO MẤT KHUÔN MẶT TRONG LÚC ĐANG LÁI XE ──
+        if (isRunning && state.status == MonitoringStatus.MONITORING && state.ear == null) {
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showCameraCheckModal = true },
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = c.safeBg)
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD)),
+                border = BorderStroke(1.2.dp, Color(0xFFFFC107))
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    Icon(
+                        Icons.Outlined.VisibilityOff,
+                        contentDescription = null,
+                        tint = Color(0xFF856404),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "⚠️ KHÔNG TÌM THẤY KHUÔN MẶT",
+                            color = Color(0xFF856404),
+                            fontSize = font.sm,
+                            fontWeight = font.bold
+                        )
+                        Text(
+                            "Nhìn thẳng kính lái hoặc chạm vào đây để căn góc camera.",
+                            color = Color(0xFF856404),
+                            fontSize = font.xs
+                        )
+                    }
                     Text(
-                        "🎯 Đã hiệu chuẩn:",
-                        color = c.safeText,
+                        "Căn góc ↗",
+                        color = Color(0xFF856404),
                         fontSize = font.xs,
                         fontWeight = font.bold
-                    )
-                    Text(
-                        "Baseline: ${"%.3f".format(state.earBaseline)} · Ngưỡng buồn ngủ: ${"%.3f".format(state.earThreshold ?: (state.earBaseline!! * 0.75))}",
-                        color = c.safe,
-                        fontSize = font.xs,
-                        fontWeight = font.semibold
                     )
                 }
             }
         }
 
-        // ── Thông điệp hệ thống ──
-        Text(
-            text = (state.dispatchTripId?.let { "Chuyến ${it.take(8)} · phân công v${state.assignmentVersion}\n" } ?: "Phiên độc lập — chọn tab Chuyến để gắn giám sát vào chuyến hàng.\n") + state.message,
-            color = if (state.status == MonitoringStatus.DROWSY) c.danger else c.textMuted,
-            fontSize = font.sm,
-            fontWeight = if (state.status == MonitoringStatus.DROWSY) font.bold else font.regular
-        )
+        // ── HUD HÀNH TRÌNH ĐANG LÁI XE (CHUẨN HÓA TYPOGRAPHY) ──
+        if (activeTrip != null) {
+            val shortCode = if (activeTrip.id.length >= 6) activeTrip.id.takeLast(6).uppercase() else activeTrip.id
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            color = if (nextStop?.kind == "pickup") Color(0xFFD4EDDA) else Color(0xFFFFEBEA),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = if (nextStop?.kind == "pickup") "ĐIỂM NHẬN HÀNG" else "ĐIỂM GIAO HÀNG",
+                                color = if (nextStop?.kind == "pickup") Color(0xFF155724) else Color(0xFF900C3F),
+                                fontSize = font.xs,
+                                fontWeight = font.bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                        Text("#TRIP-$shortCode", fontSize = font.xs, color = c.textMuted, fontWeight = font.medium)
+                    }
 
-        // ── Bảng Điều Khiển Chỉ Số AI (4 Grid Cards) ──
+                    if (nextStop != null) {
+                        Text(
+                            text = nextStop.address,
+                            fontSize = font.md,
+                            fontWeight = font.bold,
+                            color = c.text,
+                            lineHeight = 22.sp
+                        )
+                        Text(
+                            text = "Liên hệ: ${nextStop.contact} · ${nextStop.phone}",
+                            fontSize = font.sm,
+                            color = c.textMuted
+                        )
+                        Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { editingActiveStop = nextStop },
+                                modifier = Modifier.weight(1f).height(44.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Outlined.Edit, contentDescription = null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = "Ghi kết quả",
+                                    fontSize = font.sm,
+                                    fontWeight = font.bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            FilledTonalButton(
+                                onClick = {
+                                    viewModel.simulateArriveAtStop(nextStop.address)
+                                    editingActiveStop = nextStop
+                                },
+                                modifier = Modifier.height(44.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Outlined.Place, contentDescription = null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "📍 Đã tới kho",
+                                    fontSize = font.xs,
+                                    fontWeight = font.bold,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        TextButton(
+                            onClick = { showFinishActiveTripDialog = true },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("🏁 Hoàn thành toàn bộ chuyến", fontSize = font.xs, color = c.primary, fontWeight = font.bold)
+                        }
+                    } else {
+                        Text(
+                            "✅ Đã hoàn thành tất cả các điểm dừng!",
+                            fontSize = font.base,
+                            fontWeight = font.bold,
+                            color = c.safe
+                        )
+                        Button(
+                            onClick = { showFinishActiveTripDialog = true },
+                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Xác nhận hoàn thành chuyến đi", fontSize = font.base, fontWeight = font.bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── BẢNG ĐIỀU KHIỂN CHỈ SỐ AI (4 GRID CARDS CHUẨN TYPOGRAPHY M3) ──
         val currentThreshold = state.earThreshold ?: 0.20
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -564,13 +822,13 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
             MetricCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Outlined.Visibility,
-                title = "Chỉ số EAR",
-                value = state.ear?.let { "%.3f".format(it) } ?: "--",
-                subtitle = when {
-                    state.ear == null -> "Chưa phát hiện"
-                    state.ear!! < currentThreshold -> "⚠️ Nhắm mắt"
-                    else -> "Mở (Ngưỡng ${"%.2f".format(currentThreshold)})"
+                title = "Trạng thái mắt",
+                value = when {
+                    state.ear == null -> "--"
+                    state.ear!! < currentThreshold -> "Nhắm mắt"
+                    else -> "Tỉnh táo"
                 },
+                subtitle = state.ear?.let { "EAR ${"%.2f".format(it)} (chuẩn ${"%.2f".format(currentThreshold)})" } ?: "Đang quan sát",
                 accentColor = when {
                     state.ear == null -> c.textMuted
                     state.ear!! < currentThreshold -> c.danger
@@ -578,12 +836,14 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                 }
             )
             MetricCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Outlined.Psychology,
-                title = "EAR thấp (<0,25)",
-                value = state.confidence?.let { "${(it * 100).toInt()}%" } ?: "--",
-                subtitle = "Trong 13 mẫu gần nhất",
-                accentColor = c.primary
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { viewModel.toggleSimulateDriving() },
+                icon = Icons.Outlined.Speed,
+                title = if (viewModel.isSimulatingDriving) "Vận tốc (🧪 Demo)" else "Vận tốc xe",
+                value = state.gpsLocation?.speedDisplay ?: "0 km/h",
+                subtitle = if (viewModel.isSimulatingDriving) "Chạm để tắt test" else "Chạm để test tốc độ",
+                accentColor = if (viewModel.isSimulatingDriving) c.safe else c.primary
             )
         }
 
@@ -595,85 +855,18 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                 modifier = Modifier.weight(1f),
                 icon = Icons.Outlined.NotificationsActive,
                 title = "Số cảnh báo",
-                value = "${state.warningCount}",
+                value = "${state.warningCount} lần",
                 subtitle = "Sự kiện nhắm kéo dài",
                 accentColor = if (state.warningCount > 0) c.danger else c.safe
             )
             MetricCard(
                 modifier = Modifier.weight(1f),
-                icon = Icons.Outlined.Speed,
-                title = "Vận tốc xe",
-                value = state.gpsLocation?.speedDisplay ?: "0 km/h",
-                subtitle = "Định vị GPS",
+                icon = Icons.Outlined.Timer,
+                title = "Thời gian lái",
+                value = "%02d:%02d".format(state.drivingDurationSec / 60, state.drivingDurationSec % 60),
+                subtitle = if (isRunning) "Phiên đang chạy" else "Chưa bắt đầu",
                 accentColor = c.primary
             )
-        }
-
-        // ── Card Vị trí GPS Tương Tác (Bấm vào mở Google Maps ngay lập tức) ──
-        val gps = state.gpsLocation
-
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable {
-                    val lat = gps?.latitude ?: 10.7769
-                    val lng = gps?.longitude ?: 106.7009
-                    val mapUri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(Vị trí xe DriverGuard)")
-                    val mapIntent = Intent(Intent.ACTION_VIEW, mapUri).apply {
-                        setPackage("com.google.android.apps.maps")
-                    }
-                    try {
-                        context.startActivity(mapIntent)
-                    } catch (_: Exception) {
-                        val webUri = Uri.parse("https://www.google.com/maps/search/?api=1&query=$lat,$lng")
-                        context.startActivity(Intent(Intent.ACTION_VIEW, webUri))
-                    }
-                },
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = c.card),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, c.border, RoundedCornerShape(16.dp))
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(c.primaryBg),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Outlined.LocationOn, contentDescription = "GPS", tint = c.primary, modifier = Modifier.size(24.dp))
-                }
-
-                Spacer(Modifier.width(14.dp))
-
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "Vị trí GPS thời gian thực",
-                        color = c.text,
-                        fontSize = font.sm,
-                        fontWeight = font.semibold
-                    )
-                    Text(
-                        text = gps?.address ?: gps?.coordinateDisplay ?: "Đang lấy tín hiệu vệ tinh GPS...",
-                        color = c.textMuted,
-                        fontSize = font.xs
-                    )
-                    Text(
-                        text = "Chạm để mở Google Maps ↗",
-                        color = c.primary,
-                        fontSize = font.xs,
-                        fontWeight = font.medium
-                    )
-                }
-
-                Text("›", color = c.textMuted, fontSize = font.xl)
-            }
         }
 
         // ── Nút Bắt đầu / Dừng giám sát & Cửa sổ nổi ──
@@ -781,7 +974,14 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
                 title = { Text("Kết thúc phiên giám sát?") },
                 text = { Text("Giám sát sẽ dừng. Báo cáo được tính và lưu trên máy ngay cả khi không có mạng.") },
                 confirmButton = {
-                    TextButton(onClick = { confirmCompletion = false; viewModel.completeTrip() }) { Text("Hoàn thành") }
+                    TextButton(onClick = {
+                        confirmCompletion = false
+                        if (activeTrip != null) {
+                            onFinishTrip?.invoke("Hoàn thành từ màn hình giám sát")
+                        } else {
+                            viewModel.completeTrip()
+                        }
+                    }) { Text("Hoàn thành") }
                 },
                 dismissButton = { TextButton(onClick = { confirmCompletion = false }) { Text("Tiếp tục giám sát") } }
             )
@@ -790,6 +990,104 @@ fun MonitoringScreen(viewModel: MonitoringViewModel) {
             TripSummaryDialog(
                 summary = state.tripSummary!!,
                 onDismiss = viewModel::dismissTripSummary
+            )
+        }
+
+        if (editingActiveStop != null && activeTrip != null) {
+            val stop = editingActiveStop!!
+            var outcome by remember(stop.id) { mutableStateOf("full") }
+            var quantities by remember(stop.id) { mutableStateOf(stop.items.map { it.quantity.toString() }) }
+            var contact by remember(stop.id) { mutableStateOf(stop.contact) }
+            var note by remember(stop.id) { mutableStateOf("") }
+            val numbers = quantities.map { it.toDoubleOrNull() }
+            val pickup = activeTrip.stops.find { it.kind == "pickup" && it.id.substringBefore(':') == stop.id.substringBefore(':') }
+            val maximum = stop.items.mapIndexed { i, item -> if (stop.kind == "delivery") pickup?.quantities?.getOrNull(i) ?: 0.0 else item.quantity }
+            val measuredUnits = setOf("kg", "tấn", "tan", "lít", "lit", "l", "m", "m²", "m2", "m³", "m3")
+            val valid = numbers.all { it != null && it.isFinite() && it >= 0 && it <= 1_000_000_000 } && numbers.indices.all {
+                val quantity = numbers[it] ?: return@all false
+                quantity <= maximum[it] && (stop.items[it].unit.trim().lowercase(java.util.Locale.ROOT) in measuredUnits || quantity % 1.0 == 0.0)
+            }
+            val full = numbers.indices.all { numbers[it] == stop.items[it].quantity }
+            val zero = numbers.all { it == 0.0 }
+            val consistent = when (outcome) { "full" -> full; "failed" -> zero; else -> !full && !zero }
+
+            AlertDialog(
+                onDismissRequest = { editingActiveStop = null },
+                title = { Text("Kết quả " + (if (stop.kind == "pickup") "nhận" else "giao") + " hàng") },
+                text = {
+                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                            listOf("full" to "Đủ", "partial" to "Thiếu", "failed" to "Thất bại").forEach { (key, label) ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected = outcome == key, onClick = { outcome = key })
+                                    Text(label)
+                                }
+                            }
+                        }
+                        stop.items.forEachIndexed { i, item ->
+                            OutlinedTextField(
+                                value = quantities[i],
+                                onValueChange = { v -> quantities = quantities.mapIndexed { j, old -> if (i == j) v else old } },
+                                label = { Text("${item.name} (${item.unit}) · Tối đa: ${maximum[i]}") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        OutlinedTextField(
+                            value = contact,
+                            onValueChange = { contact = it },
+                            label = { Text("Người giao/nhận thực tế") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (outcome != "full") {
+                            OutlinedTextField(
+                                value = note,
+                                onValueChange = { note = it },
+                                label = { Text("Lý do thiếu / thất bại") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        enabled = valid && consistent && contact.isNotBlank() && (outcome == "full" || note.isNotBlank()),
+                        onClick = {
+                            onRecordStop?.invoke(stop, outcome, numbers.map { it!! }, contact, note)
+                            editingActiveStop = null
+                        }
+                    ) { Text("Lưu kết quả") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { editingActiveStop = null }) { Text("Đóng") }
+                }
+            )
+        }
+
+        if (showFinishActiveTripDialog && activeTrip != null) {
+            var reason by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { showFinishActiveTripDialog = false },
+                title = { Text("Hoàn thành chuyến đi") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Xác nhận hoàn thành chuyến đi này và đóng phiên giám sát.")
+                        OutlinedTextField(
+                            value = reason,
+                            onValueChange = { reason = it },
+                            label = { Text("Ghi chú chuyến đi (không bắt buộc)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        onFinishTrip?.invoke(reason)
+                        showFinishActiveTripDialog = false
+                    }) { Text("Xác nhận") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showFinishActiveTripDialog = false }) { Text("Đóng") }
+                }
             )
         }
     }
@@ -907,4 +1205,270 @@ private fun statusLabel(status: MonitoringStatus): String = when (status) {
     MonitoringStatus.DROWSY      -> "MẮT NHẮM KÉO DÀI"
     MonitoringStatus.PAUSED      -> "ĐÃ TẠM DỪNG"
     MonitoringStatus.STOPPED     -> "ĐÃ DỪNG"
+}
+
+private val GoogleRoadsTileSource = object : OnlineTileSourceBase(
+    "GoogleRoads",
+    0, 20, 256, ".png",
+    arrayOf(
+        "https://mt0.google.com/vt/lyrs=m&hl=vi&x=",
+        "https://mt1.google.com/vt/lyrs=m&hl=vi&x=",
+        "https://mt2.google.com/vt/lyrs=m&hl=vi&x=",
+        "https://mt3.google.com/vt/lyrs=m&hl=vi&x="
+    )
+) {
+    override fun getTileURLString(pMapTileIndex: Long): String {
+        val zoom = MapTileIndex.getZoom(pMapTileIndex)
+        val x = MapTileIndex.getX(pMapTileIndex)
+        val y = MapTileIndex.getY(pMapTileIndex)
+        return baseUrl + x + "&y=" + y + "&z=" + zoom
+    }
+}
+
+private fun createCarMarkerDrawable(context: android.content.Context): android.graphics.drawable.Drawable {
+    val density = context.resources.displayMetrics.density
+    val size = (38 * density).toInt()
+    val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+    // Outer navigation pulse glow
+    paint.color = android.graphics.Color.argb(60, 26, 115, 232)
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f, paint)
+
+    // White rim
+    paint.color = android.graphics.Color.WHITE
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 2.5f * density, paint)
+
+    // Blue core
+    paint.color = android.graphics.Color.parseColor("#1A73E8")
+    canvas.drawCircle(size / 2f, size / 2f, size / 2f - 5f * density, paint)
+
+    // Center white dot
+    paint.color = android.graphics.Color.WHITE
+    canvas.drawCircle(size / 2f, size / 2f, 3.5f * density, paint)
+
+    return android.graphics.drawable.BitmapDrawable(context.resources, bitmap)
+}
+
+private fun createStopMarkerDrawable(context: android.content.Context, number: Int, isPickup: Boolean): android.graphics.drawable.Drawable {
+    val density = context.resources.displayMetrics.density
+    val width = (34 * density).toInt()
+    val height = (44 * density).toInt()
+    val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+
+    val pinColor = if (isPickup) android.graphics.Color.parseColor("#2E7D32") else android.graphics.Color.parseColor("#D32F2F")
+    paint.color = pinColor
+    paint.style = android.graphics.Paint.Style.FILL
+
+    val radius = width / 2f - 2 * density
+    val centerY = radius + 2 * density
+    canvas.drawCircle(width / 2f, centerY, radius, paint)
+
+    val path = android.graphics.Path().apply {
+        moveTo(width / 2f - radius * 0.7f, centerY + radius * 0.5f)
+        lineTo(width / 2f + radius * 0.7f, centerY + radius * 0.5f)
+        lineTo(width / 2f, height.toFloat() - 2 * density)
+        close()
+    }
+    canvas.drawPath(path, paint)
+
+    // Inner white circle
+    paint.color = android.graphics.Color.WHITE
+    canvas.drawCircle(width / 2f, centerY, radius * 0.65f, paint)
+
+    // Text number inside
+    paint.color = pinColor
+    paint.textSize = radius * 0.9f
+    paint.textAlign = android.graphics.Paint.Align.CENTER
+    paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+    val textY = centerY - ((paint.descent() + paint.ascent()) / 2)
+    canvas.drawText(number.toString(), width / 2f, textY, paint)
+
+    return android.graphics.drawable.BitmapDrawable(context.resources, bitmap)
+}
+
+/**
+ * Bản đồ dẫn đường Native chuẩn Google Maps.
+ * Hiển thị vị trí xe 🚗 dạng radar GPS, các điểm dừng 📍 được đánh số 1, 2 và đường đi polyline.
+ * 100% tiếng Việt, sắc nét, không watermark, không lag.
+ */
+@Composable
+fun NativeMonitoringMapView(
+    stops: List<TripStop>,
+    activeStop: TripStop?,
+    currentGps: GpsLocation?,
+    onOpenVoiceNavigation: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    var stopCoordinates by remember(stops) { mutableStateOf<List<Pair<TripStop, GeoPoint>>>(emptyList()) }
+    var mapViewInstance by remember { mutableStateOf<MapView?>(null) }
+
+    // Phân giải toạ độ ngầm các điểm dừng
+    LaunchedEffect(stops) {
+        val resolved = stops.mapIndexed { index, stop ->
+            val point = resolveStopLocation(context, stop.address, index)
+            Pair(stop, point)
+        }
+        stopCoordinates = resolved
+    }
+
+    Box(modifier = modifier) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                Configuration.getInstance().userAgentValue = "DriverGuard/1.0 (Android; Graduate Thesis Project)"
+                MapView(ctx).apply {
+                    setTileSource(GoogleRoadsTileSource)
+                    setMultiTouchControls(true)
+                    isTilesScaledToDpi = true
+                    controller.setZoom(14.0)
+
+                    val defaultCenter = if (currentGps != null && currentGps.latitude != 0.0) {
+                        GeoPoint(currentGps.latitude, currentGps.longitude)
+                    } else {
+                        GeoPoint(10.7769, 106.7009)
+                    }
+                    controller.setCenter(defaultCenter)
+
+                    setOnTouchListener { v, event ->
+                        when (event.action) {
+                            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                                v.parent.requestDisallowInterceptTouchEvent(true)
+                            }
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                v.parent.requestDisallowInterceptTouchEvent(false)
+                            }
+                        }
+                        false
+                    }
+                    mapViewInstance = this
+                }
+            },
+            update = { mapView ->
+                mapView.overlays.clear()
+                val allPoints = mutableListOf<GeoPoint>()
+
+                // 1. Tọa độ xe hiện tại
+                val carPoint = if (currentGps != null && currentGps.latitude != 0.0 && currentGps.longitude != 0.0) {
+                    GeoPoint(currentGps.latitude, currentGps.longitude)
+                } else {
+                    GeoPoint(10.7769, 106.7009)
+                }
+                allPoints.add(carPoint)
+
+                // 2. Điểm dừng
+                stopCoordinates.forEach { (_, point) ->
+                    allPoints.add(point)
+                }
+
+                // 3. Vẽ đường Polyline kết nối xe đến các điểm dừng
+                if (stopCoordinates.isNotEmpty()) {
+                    val polyline = Polyline(mapView).apply {
+                        outlinePaint.color = android.graphics.Color.parseColor("#1976D2")
+                        outlinePaint.strokeWidth = 10f
+                        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                        outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+                        val points = mutableListOf(carPoint)
+                        stopCoordinates.forEach { points.add(it.second) }
+                        setPoints(points)
+                    }
+                    mapView.overlays.add(polyline)
+                }
+
+                // 4. Marker các điểm dừng với cờ ghim đánh số
+                stopCoordinates.forEachIndexed { idx, (stop, point) ->
+                    val isNext = (activeStop?.address == stop.address)
+                    val stopMarker = Marker(mapView).apply {
+                        position = point
+                        icon = createStopMarkerDrawable(context, idx + 1, stop.kind == "pickup")
+                        title = "${idx + 1}. ${if (stop.kind == "pickup") "Kho Nhận" else "Kho Giao"}${if (isNext) " [Điểm kế tiếp]" else ""}"
+                        snippet = stop.address
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                    }
+                    mapView.overlays.add(stopMarker)
+                }
+
+                // 5. Marker Xe của bạn dạng radar GPS
+                val carMarker = Marker(mapView).apply {
+                    position = carPoint
+                    icon = createCarMarkerDrawable(context)
+                    title = "🚗 Xe của bạn"
+                    snippet = "Vận tốc: ${currentGps?.speedKmh?.toInt() ?: 0} km/h"
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                }
+                mapView.overlays.add(carMarker)
+
+                // 6. Tự động zoom vừa vặn toàn bộ lộ trình
+                if (allPoints.size > 1) {
+                    try {
+                        val box = BoundingBox.fromGeoPoints(allPoints)
+                        mapView.zoomToBoundingBox(box.increaseByScale(1.35f), true)
+                    } catch (_: Exception) {
+                        mapView.controller.setCenter(carPoint)
+                    }
+                } else {
+                    mapView.controller.setCenter(carPoint)
+                    mapView.controller.setZoom(15.0)
+                }
+                mapView.invalidate()
+            }
+        )
+
+        // 7. Nút Định vị lại tâm xe (Góc dưới bên phải)
+        FloatingActionButton(
+            onClick = {
+                val carPoint = if (currentGps != null && currentGps.latitude != 0.0) {
+                    GeoPoint(currentGps.latitude, currentGps.longitude)
+                } else {
+                    GeoPoint(10.7769, 106.7009)
+                }
+                mapViewInstance?.controller?.animateTo(carPoint, 16.0, 600L)
+            },
+            modifier = Modifier
+                .padding(10.dp)
+                .size(38.dp)
+                .align(Alignment.BottomEnd),
+            shape = CircleShape,
+            containerColor = Color.White.copy(alpha = 0.95f),
+            contentColor = MaterialTheme.colorScheme.primary,
+            elevation = FloatingActionButtonDefaults.elevation(2.dp)
+        ) {
+            Icon(Icons.Outlined.MyLocation, contentDescription = "Tâm xe", modifier = Modifier.size(18.dp))
+        }
+
+        // 8. Nút phụ: Dẫn đường giọng nói ngoài Google Maps (Góc dưới bên trái)
+        if (onOpenVoiceNavigation != null) {
+            Surface(
+                modifier = Modifier
+                    .padding(10.dp)
+                    .align(Alignment.BottomStart)
+                    .clickable { onOpenVoiceNavigation() },
+                color = Color.Black.copy(alpha = 0.75f),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Navigation,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                        "Dẫn đường giọng nói ↗",
+                        color = Color.White,
+                        fontSize = MaterialTheme.font.xs,
+                        fontWeight = MaterialTheme.font.semibold
+                    )
+                }
+            }
+        }
+    }
 }

@@ -12,6 +12,13 @@ val onlineProperties = Properties().apply {
     val configFile = rootProject.file("online.properties")
     if (configFile.exists()) configFile.inputStream().use { load(it) }
 }
+val navigationProperties = Properties().apply {
+    val configFile = rootProject.file("local.properties")
+    if (configFile.exists()) configFile.inputStream().use { load(it) }
+}
+val navigationApiKey = providers.environmentVariable("GOOGLE_NAVIGATION_API_KEY")
+    .orElse(navigationProperties.getProperty("googleNavigationApiKey", "")).get()
+require(navigationApiKey.matches(Regex("[A-Za-z0-9_-]*"))) { "Invalid Google Navigation API key" }
 val dispatchApiUrl = providers.gradleProperty("dispatchApiUrl").orElse(providers.environmentVariable("DISPATCH_API_URL"))
     .orElse(onlineProperties.getProperty("dispatchApiUrl", "")).get().trimEnd('/')
 require(dispatchApiUrl.isEmpty() || dispatchApiUrl.matches(Regex("https://[A-Za-z0-9.-]+(:[0-9]+)?"))) { "dispatchApiUrl must be an HTTPS origin" }
@@ -29,8 +36,10 @@ android {
         applicationId = "com.example.driverguard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.0.6"
+        versionCode = 8
+        versionName = "1.0.7"
+        manifestPlaceholders["googleNavigationApiKey"] = navigationApiKey
+        buildConfigField("boolean", "GOOGLE_NAVIGATION_CONFIGURED", navigationApiKey.isNotBlank().toString())
         buildConfigField("boolean", "FIREBASE_EMULATORS", localFirebase.toString())
         buildConfigField("String", "FIREBASE_EMULATOR_HOST", "\"$localFirebaseHost\"")
         buildConfigField("String", "DISPATCH_API_URL", "\"$dispatchApiUrl\"")
@@ -106,6 +115,7 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
 }
 
 

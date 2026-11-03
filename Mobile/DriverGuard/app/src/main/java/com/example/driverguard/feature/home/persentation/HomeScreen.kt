@@ -17,8 +17,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.LocalShipping
+import com.example.driverguard.feature.dispatch.AssignedTrip
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PlayArrow
@@ -51,6 +54,8 @@ fun HomeScreen(
     onStartMonitoring: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenVehicles: () -> Unit = {},
+    activeTrip: AssignedTrip? = null,
+    onOpenTrips: () -> Unit = onStartMonitoring,
     viewModel: HomeViewModel = viewModel()
 ) {
     val c = MaterialTheme.c
@@ -99,6 +104,62 @@ fun HomeScreen(
                     tint = c.primary,
                     modifier = Modifier.size(24.dp)
                 )
+            }
+        }
+
+        // ── BANNER CHUYẾN HÀNG ĐANG CHỜ / CẦN THỰC HIỆN ──
+        if (activeTrip != null) {
+            val shortCode = if (activeTrip.id.length >= 6) activeTrip.id.takeLast(6).uppercase() else activeTrip.id
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenTrips() },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
+                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.LocalShipping,
+                            contentDescription = null,
+                            tint = androidx.compose.ui.graphics.Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Spacer(Modifier.width(14.dp))
+
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "BẠN CÓ CHUYẾN ĐI CẦN THỰC HIỆN!",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = font.xs,
+                            fontWeight = font.bold
+                        )
+                        Text(
+                            text = "Chuyến #$shortCode · ${activeTrip.stops.size} điểm dừng",
+                            color = c.text,
+                            fontSize = font.base,
+                            fontWeight = font.bold
+                        )
+                        Text(
+                            text = "Chạm để vào xem lộ trình & dẫn đường ↗",
+                            color = c.primary,
+                            fontSize = font.xs,
+                            fontWeight = font.medium
+                        )
+                    }
+                }
             }
         }
 

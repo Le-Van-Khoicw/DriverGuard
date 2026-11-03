@@ -64,7 +64,10 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.c.bg
                 ) {
-                    AppNavigation(notificationTripId = notificationTripId, onNotificationConsumed = { notificationTripId = null })
+                    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                        AppNavigation(notificationTripId = notificationTripId, onNotificationConsumed = { notificationTripId = null })
+                        com.example.driverguard.core.navigation.NavigationDestinationHost()
+                    }
                 }
             }
         }

@@ -1,4 +1,4 @@
-package com.example.driverguard.feature.dispatch
+﻿package com.example.driverguard.feature.dispatch
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
@@ -27,7 +27,7 @@ data class TripStop(val id: String, val kind: String, val address: String, val c
     val phone: String, val items: List<CargoItem>, val status: String, val quantities: List<Double> = emptyList(), val note: String = "")
 data class AssignedTrip(val id: String, val name: String, val driverId: String, val vehiclePlate: String,
     val dispatcherId: String, val start: Long, val end: Long, val status: String, val assignmentVersion: Long,
-    val stops: List<TripStop>, val updatedAt: Long, val vehicleName: String = "")
+    val stops: List<TripStop>, val updatedAt: Long, val vehicleName: String = "", val dispatcherName: String = "")
 data class DriverLeave(val id: String, val start: Long, val end: Long, val reason: String, val status: String)
 data class DispatchState(val trips: List<AssignedTrip> = emptyList(), val busy: Boolean = false,
     val loaded: Boolean = false, val fromCache: Boolean = true, val pending: Int = 0,
@@ -132,7 +132,18 @@ class DispatchViewModel(application: Application) : AndroidViewModel(application
     fun recordStop(trip: AssignedTrip, stop: TripStop, outcome: String, quantities: List<Double>, contact: String, note: String) {
         enqueue(operation("updateStop", trip, mapOf("stopId" to stop.id, "outcome" to outcome, "quantities" to quantities, "actualContact" to contact.trim(), "reason" to note.trim())))
     }
-    fun finishTrip(trip: AssignedTrip, note: String) { enqueue(operation("finishTrip", trip, mapOf("reason" to note.trim()))) }
+    fun finishTrip(trip: AssignedTrip, note: String) {
+        trip.stops.filter { it.status == "pending" }.forEach { stop ->
+            enqueue(operation("updateStop", trip, mapOf(
+                "stopId" to stop.id,
+                "outcome" to "full",
+                "quantities" to stop.items.map { it.quantity },
+                "actualContact" to stop.contact.ifBlank { "Người nhận" },
+                "reason" to "Tự động ghi nhận khi hoàn thành chuyến"
+            )))
+        }
+        enqueue(operation("finishTrip", trip, mapOf("reason" to note.trim())))
+    }
     private fun operation(action: String, trip: AssignedTrip?, fields: Map<String, Any?>) = fields + mapOf(
         "action" to action, "operationId" to UUID.randomUUID().toString(), "tripId" to trip?.id,
         "assignmentVersion" to trip?.assignmentVersion)
@@ -217,5 +228,5 @@ private fun decodeTrip(id: String, m: Map<String, Any?>): AssignedTrip {
             s["status"] as String, (s["quantities"] as? List<*>)?.map { (it as Number).toDouble() } ?: emptyList(), s["note"] as? String ?: "")
     } ?: emptyList()
     return AssignedTrip(id, m["name"] as String, m["driverId"] as String, m["vehiclePlate"] as String,
-        m["dispatcherId"] as String, number("start"), number("end"), m["status"] as String, number("assignmentVersion"), stops, number("updatedAt"), m["vehicleName"] as? String ?: "")
+        m["dispatcherId"] as String, number("start"), number("end"), m["status"] as String, number("assignmentVersion"), stops, number("updatedAt"), m["vehicleName"] as? String ?: "", m["dispatcherName"] as? String ?: "")
 }

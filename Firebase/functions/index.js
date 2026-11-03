@@ -21,12 +21,15 @@ const terminal = status => ['completed', 'completed_issues', 'cancelled'].includ
 // Auth is the source of the suggested staff name, never a name sent by the browser.
 const accountName = account => String(account.providerData.find(p => p.providerId === 'google.com')?.displayName || account.displayName || account.email?.split('@')[0] || account.uid).trim().slice(0, 200);
 const clean = schedule => ({ reservations: schedule?.reservations || {}, leaves: schedule?.leaves || {} });
-function available(schedule, period, except, now) {
+function available(schedule, period, except, now, resourceLabel = 'Tài xế hoặc xe') {
   for (const [id, r] of Object.entries(schedule.reservations)) {
     // An overdue running truck is still occupied. Planned end is not a release signal.
-    if (id !== except && (r.running || overlaps(r, period))) fail('Tài xế hoặc xe đã có chuyến trùng lịch / đang chạy');
+    if (id !== except && (r.running || overlaps(r, period))) {
+      const shortId = id.slice(0, 8);
+      fail(`${resourceLabel} đã có chuyến trùng lịch hoặc đang chạy (chuyến ${shortId})`);
+    }
   }
-  for (const leave of Object.values(schedule.leaves)) if (overlaps(leave, period) || (period.running && leave.start <= now && now < leave.end)) fail('Tài xế đang nghỉ đã được duyệt');
+  for (const leave of Object.values(schedule.leaves)) if (overlaps(leave, period) || (period.running && leave.start <= now && now < leave.end)) fail(`${resourceLabel} đang nghỉ đã được duyệt`);
 }
 
 /** All business mutations pass here. Clients cannot write dispatch state directly.
@@ -340,14 +343,14 @@ export async function handleDispatchCommand(request) {
     if (assignment) {
       dispatcher();
       if (!create && (action === 'handover' ? !['in_progress', 'handover_pending'].includes(old.status) : !['assigned', 'accepted', 'needs_reassignment', 'declined'].includes(old.status))) fail('Không thể đổi phân công ở trạng thái hiện tại');
-      if (!create && old.driverId === driverId) fail('Hãy chọn tài xế thay thế khác');
+      if (!create && action !== 'handover' && old.status !== 'declined' && old.driverId === driverId) fail('Hãy chọn tài xế thay thế khác');
       if (driverDoc.data()?.accountStatus !== 'active') fail('Tài xế chưa được duyệt hoặc đang khóa');
       requireApprovedDossier(driverDoc.data(), Math.max(trip.end, now), vehicleId);
       if (vehicleDoc.data()?.status !== 'available') fail('Xe không sẵn sàng');
       const weight = orderDocs.reduce((sum, d) => sum + (d.data()?.weightKg || 0), 0);
       if (weight > vehicleDoc.data().capacityKg) fail('Tổng hàng vượt tải trọng xe');
       const period = { start: action === 'handover' ? now : trip.start, end: Math.max(trip.end, now + 1), running: action === 'handover' };
-      available(driverCalendar, period, tripRef.id, now); available(vehicleCalendar, period, tripRef.id, now);
+      available(driverCalendar, period, tripRef.id, now, `Tài xế ${driverDoc.data()?.displayName || driverDoc.data()?.fullName || driverId}`); available(vehicleCalendar, period, tripRef.id, now, `Xe ${vehicleDoc.data()?.plate || vehicleId}`);
       if (create) {
         for (const d of orderDocs) if (!d.exists || d.data().status !== 'ready' || d.data().tripId) fail('Một đơn đã thuộc chuyến khác / chưa sẵn sàng');
         // Explicit order defines pickup/delivery sequencing; never infer cargo delivery from GPS.
@@ -369,6 +372,7 @@ export async function handleDispatchCommand(request) {
       Object.assign(trip, { driverId, driverName: driverDoc.data().fullName || driverDoc.data().displayName || driverId,
         vehicleName: vehicleDoc.data().name || '', vehiclePlate: vehicleDoc.data().plate, dispatcherId: uid, dispatcherName: staff.displayName || '', dispatcherEmail: staff.email || '', assignmentVersion: trip.assignmentVersion + 1,
         status: action === 'handover' ? 'handover_pending' : 'assigned', history, assignedAt: now });
+      delete trip.declineReason;
       if (previousCalendarDoc) {
         const previous = clean(previousCalendarDoc.data()); delete previous.reservations[tripRef.id]; tx.set(previousCalendarDoc.ref, previous);
       }
@@ -395,7 +399,7 @@ export async function handleDispatchCommand(request) {
       if (vehicleDoc.data()?.status !== 'available') fail('Xe không sẵn sàng');
       requireApprovedDossier(driverDoc.data(), Math.max(trip.end, now), vehicleId);
       const period = { start: Math.min(now, trip.start), end: Math.max(now + 1, trip.end), running: true };
-      available(driverCalendar, period, tripRef.id, now); available(vehicleCalendar, period, tripRef.id, now);
+      available(driverCalendar, period, tripRef.id, now, `Tài xế ${driverDoc.data()?.displayName || driverDoc.data()?.fullName || driverId}`); available(vehicleCalendar, period, tripRef.id, now, `Xe ${vehicleDoc.data()?.plate || vehicleId}`);
       driverCalendar.reservations[tripRef.id] = period; vehicleCalendar.reservations[tripRef.id] = period;
       trip.status = 'in_progress'; trip.actualStart = now;
     } else if (action === 'updateStop') {
@@ -418,7 +422,31 @@ export async function handleDispatchCommand(request) {
       if (stop.kind === 'delivery') tx.update(ref('transportOrders', stop.orderId), { status: p.outcome === 'full' ? 'delivered' : 'delivery_issue', updatedAt: now, deliveryResult: trip.stops[index] });
     } else if (action === 'finishTrip') {
       if (isStaff || trip.status !== 'in_progress') fail('Chỉ tài xế kết thúc chuyến đang chạy');
-      if (trip.stops.some(s => s.status === 'pending')) fail('Cần ghi kết quả của tất cả điểm dừng trước khi kết thúc');
+      // Tự động hoàn thành các điểm dừng còn pending nếu kết thúc chuyến trực tiếp
+      trip.stops = trip.stops.map(s => {
+        if (s.status === 'pending') {
+          return {
+            ...s,
+            status: 'full',
+            quantities: (s.items || []).map(it => it.quantity),
+            actualContact: s.contact || 'Người nhận',
+            completedAt: now,
+            driverId: uid,
+            assignmentVersion: trip.assignmentVersion,
+            note: 'Tự động hoàn thành khi kết thúc chuyến'
+          };
+        }
+        return s;
+      });
+      for (const stop of trip.stops) {
+        if (stop.kind === 'delivery') {
+          tx.update(ref('transportOrders', stop.orderId), {
+            status: stop.status === 'full' ? 'delivered' : 'delivery_issue',
+            updatedAt: now,
+            deliveryResult: stop
+          });
+        }
+      }
       trip.status = trip.stops.every(s => s.status === 'full') ? 'completed' : 'completed_issues';
       if (trip.status === 'completed_issues') trip.issueReason = text(p.reason, 'ghi chú kết thúc có vấn đề');
       trip.actualEnd = now;
