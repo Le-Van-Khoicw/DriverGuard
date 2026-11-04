@@ -101,7 +101,11 @@ fun AppNavigation(notificationTripId: String? = null, onNotificationConsumed: ()
         val linkedId = monitoringState.dispatchTripId
         if (linkedId != null && monitoringState.hasActiveTrip && dispatchState.loaded && !dispatchState.fromCache) {
             val assigned = dispatchState.trips.find { it.id == linkedId }
-            if (assigned == null || assigned.assignmentVersion != monitoringState.assignmentVersion || assigned.status !in listOf("in_progress", "completion_pending")) {
+            // Chỉ đóng giám sát nếu chuyến đã kết thúc, bị hủy, từ chối hoặc đổi tài xế/phiên bản
+            val isTerminal = assigned == null ||
+                assigned.assignmentVersion != monitoringState.assignmentVersion ||
+                assigned.status in listOf("completed", "completed_issues", "cancelled", "declined", "needs_reassignment")
+            if (isTerminal) {
                 monitoring.closeForDispatch(linkedId, monitoringState.assignmentVersion)
             }
         }

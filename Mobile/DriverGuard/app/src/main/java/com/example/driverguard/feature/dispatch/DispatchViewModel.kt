@@ -123,7 +123,17 @@ class DispatchViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 withTimeout(100_000) { BusinessFunctions.command().call(operation).await() }
-                if (uid == account) { _state.value = _state.value.copy(message = "Máy chủ đã xác nhận. Đang cập nhật chuyến…"); onSuccess() }
+                if (uid == account) {
+                    if (action == "startTrip" && trip != null) {
+                        serverTrips = serverTrips.map { if (it.id == trip.id) it.copy(status = "in_progress") else it }
+                        publish()
+                    } else if (action == "acceptTrip" && trip != null) {
+                        serverTrips = serverTrips.map { if (it.id == trip.id) it.copy(status = "accepted") else it }
+                        publish()
+                    }
+                    _state.value = _state.value.copy(message = "Máy chủ đã xác nhận. Đang cập nhật chuyến…")
+                    onSuccess()
+                }
             } catch (e: Exception) { if (uid == account) _state.value = _state.value.copy(error = "Chưa nhận xác nhận: ${e.message}. Kiểm tra trạng thái chuyến trước khi thử lại.") }
             finally { if (uid == account) _state.value = _state.value.copy(busy = false) }
         }
