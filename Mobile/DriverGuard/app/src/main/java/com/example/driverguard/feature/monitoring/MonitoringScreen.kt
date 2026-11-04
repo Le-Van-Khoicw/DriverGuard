@@ -996,20 +996,34 @@ fun MonitoringScreen(
         if (editingActiveStop != null && activeTrip != null) {
             val stop = editingActiveStop!!
             var outcome by remember(stop.id) { mutableStateOf("full") }
-            var quantities by remember(stop.id) { mutableStateOf(stop.items.map { it.quantity.toString() }) }
+            var quantities by remember(stop.id) {
+                mutableStateOf(stop.items.map { if (it.quantity % 1.0 == 0.0) it.quantity.toInt().toString() else it.quantity.toString() })
+            }
             var contact by remember(stop.id) { mutableStateOf(stop.contact) }
             var note by remember(stop.id) { mutableStateOf("") }
             val numbers = quantities.map { it.toDoubleOrNull() }
             val pickup = activeTrip.stops.find { it.kind == "pickup" && it.id.substringBefore(':') == stop.id.substringBefore(':') }
             val maximum = stop.items.mapIndexed { i, item -> if (stop.kind == "delivery") pickup?.quantities?.getOrNull(i) ?: 0.0 else item.quantity }
             val measuredUnits = setOf("kg", "tấn", "tan", "lít", "lit", "l", "m", "m²", "m2", "m³", "m3")
-            val valid = numbers.all { it != null && it.isFinite() && it >= 0 && it <= 1_000_000_000 } && numbers.indices.all {
-                val quantity = numbers[it] ?: return@all false
-                quantity <= maximum[it] && (stop.items[it].unit.trim().lowercase(java.util.Locale.ROOT) in measuredUnits || quantity % 1.0 == 0.0)
+            val full = numbers.indices.all { numbers[it] != null && numbers[it] == stop.items[it].quantity }
+            val zero = numbers.all { it != null && it == 0.0 }
+
+            val errorMessage: String? = when {
+                numbers.any { it == null } -> "Số lượng không được để trống hoặc sai định dạng số"
+                numbers.indices.any { (numbers[it] ?: 0.0) > maximum[it] } -> "Số lượng thực tế không được vượt quá tối đa (${maximum.joinToString()})"
+                numbers.indices.any { (numbers[it] ?: 0.0) < 0 } -> "Số lượng không được là số âm"
+                numbers.indices.any {
+                    val q = numbers[it] ?: 0.0
+                    stop.items[it].unit.trim().lowercase(java.util.Locale.ROOT) !in measuredUnits && q % 1.0 != 0.0
+                } -> "Hàng đơn vị '${stop.items.firstOrNull { it.unit.trim().lowercase(java.util.Locale.ROOT) !in measuredUnits }?.unit}' phải là số nguyên (không được lẻ)"
+                outcome == "full" && !full -> "Nhận/giao 'Đủ' thì số lượng phải đủ 100%"
+                outcome == "failed" && !zero -> "Khi chọn 'Thất bại', số lượng phải là 0"
+                outcome == "partial" && full -> "Khi chọn 'Thiếu', số lượng phải nhỏ hơn số lượng ban đầu"
+                outcome == "partial" && zero -> "Khi chọn 'Thiếu', số lượng phải lớn hơn 0 (nếu không còn kiện nào hãy chọn 'Thất bại')"
+                contact.isBlank() -> "Vui lòng nhập người giao/nhận thực tế"
+                outcome != "full" && note.isBlank() -> "Vui lòng nhập lý do thiếu / thất bại"
+                else -> null
             }
-            val full = numbers.indices.all { numbers[it] == stop.items[it].quantity }
-            val zero = numbers.all { it == 0.0 }
-            val consistent = when (outcome) { "full" -> full; "failed" -> zero; else -> !full && !zero }
 
             AlertDialog(
                 onDismissRequest = { editingActiveStop = null },
@@ -1019,7 +1033,17 @@ fun MonitoringScreen(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                             listOf("full" to "Đủ", "partial" to "Thiếu", "failed" to "Thất bại").forEach { (key, label) ->
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    RadioButton(selected = outcome == key, onClick = { outcome = key })
+                                    RadioButton(
+                                        selected = outcome == key,
+                                        onClick = {
+                                            outcome = key
+                                            if (key == "failed") {
+                                                quantities = stop.items.map { "0" }
+                                            } else if (key == "full") {
+                                                quantities = maximum.map { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() }
+                                            }
+                                        }
+                                    )
                                     Text(label)
                                 }
                             }
@@ -1046,11 +1070,18 @@ fun MonitoringScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
+                        errorMessage?.let {
+                            Text(
+                                text = it,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 },
                 confirmButton = {
                     Button(
-                        enabled = valid && consistent && contact.isNotBlank() && (outcome == "full" || note.isNotBlank()),
+                        enabled = errorMessage == null,
                         onClick = {
                             onRecordStop?.invoke(stop, outcome, numbers.map { it!! }, contact, note)
                             editingActiveStop = null
