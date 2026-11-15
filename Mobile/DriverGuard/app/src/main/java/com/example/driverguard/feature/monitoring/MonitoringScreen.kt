@@ -80,14 +80,12 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
-import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.CopyrightOverlay
 import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Polyline
 import com.example.driverguard.feature.dispatch.resolveStopLocation
 import com.example.driverguard.feature.dispatch.AssignedTrip
 import com.example.driverguard.feature.dispatch.TripStop
@@ -127,11 +125,9 @@ import java.util.concurrent.Executors
 fun MonitoringScreen(
     viewModel: MonitoringViewModel,
     activeTrip: AssignedTrip? = null,
-    onRecordStop: ((TripStop, String, List<Double>, String, String) -> Unit)? = null,
-    onFinishTrip: ((String) -> Unit)? = null
+    onRecordStop: ((TripStop, String, List<Double>, String, String) -> Unit)? = null
 ) {
     var editingActiveStop by remember { mutableStateOf<TripStop?>(null) }
-    var showFinishActiveTripDialog by remember { mutableStateOf(false) }
     val c = MaterialTheme.c
     val font = MaterialTheme.font
     val state by viewModel.uiState.collectAsState()
@@ -187,6 +183,7 @@ fun MonitoringScreen(
         }
         onDispose {
             locationTracker.stopTracking()
+            viewModel.onLocationUpdated(null)
         }
     }
 
@@ -770,44 +767,14 @@ fun MonitoringScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
-                            FilledTonalButton(
-                                onClick = {
-                                    viewModel.simulateArriveAtStop(nextStop.address)
-                                    editingActiveStop = nextStop
-                                },
-                                modifier = Modifier.height(44.dp),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Outlined.Place, contentDescription = null, Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = "📍 Đã tới kho",
-                                    fontSize = font.xs,
-                                    fontWeight = font.bold,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                        TextButton(
-                            onClick = { showFinishActiveTripDialog = true },
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("🏁 Hoàn thành toàn bộ chuyến", fontSize = font.xs, color = c.primary, fontWeight = font.bold)
                         }
                     } else {
                         Text(
-                            "✅ Đã hoàn thành tất cả các điểm dừng!",
+                            "Đã ghi kết quả các điểm dừng. Vào tab Chuyến để xác nhận hoàn thành giao hàng.",
                             fontSize = font.base,
                             fontWeight = font.bold,
                             color = c.safe
                         )
-                        Button(
-                            onClick = { showFinishActiveTripDialog = true },
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text("Xác nhận hoàn thành chuyến đi", fontSize = font.base, fontWeight = font.bold)
-                        }
                     }
                 }
             }
@@ -836,14 +803,12 @@ fun MonitoringScreen(
                 }
             )
             MetricCard(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { viewModel.toggleSimulateDriving() },
+                modifier = Modifier.weight(1f),
                 icon = Icons.Outlined.Speed,
-                title = if (viewModel.isSimulatingDriving) "Vận tốc (🧪 Demo)" else "Vận tốc xe",
-                value = state.gpsLocation?.speedDisplay ?: "0 km/h",
-                subtitle = if (viewModel.isSimulatingDriving) "Chạm để tắt test" else "Chạm để test tốc độ",
-                accentColor = if (viewModel.isSimulatingDriving) c.safe else c.primary
+                title = "Vận tốc GPS",
+                value = state.gpsLocation?.speedDisplay ?: "—",
+                subtitle = state.gpsLocation?.accuracyDisplay ?: if (hasLocationPermission) "Đang chờ vị trí" else "Cần quyền vị trí chính xác",
+                accentColor = c.primary
             )
         }
 
@@ -976,11 +941,7 @@ fun MonitoringScreen(
                 confirmButton = {
                     TextButton(onClick = {
                         confirmCompletion = false
-                        if (activeTrip != null) {
-                            onFinishTrip?.invoke("Hoàn thành từ màn hình giám sát")
-                        } else {
-                            viewModel.completeTrip()
-                        }
+                        viewModel.completeTrip()
                     }) { Text("Hoàn thành") }
                 },
                 dismissButton = { TextButton(onClick = { confirmCompletion = false }) { Text("Tiếp tục giám sát") } }
@@ -1094,33 +1055,6 @@ fun MonitoringScreen(
             )
         }
 
-        if (showFinishActiveTripDialog && activeTrip != null) {
-            var reason by remember { mutableStateOf("") }
-            AlertDialog(
-                onDismissRequest = { showFinishActiveTripDialog = false },
-                title = { Text("Hoàn thành chuyến đi") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Xác nhận hoàn thành chuyến đi này và đóng phiên giám sát.")
-                        OutlinedTextField(
-                            value = reason,
-                            onValueChange = { reason = it },
-                            label = { Text("Ghi chú chuyến đi (không bắt buộc)") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(onClick = {
-                        onFinishTrip?.invoke(reason)
-                        showFinishActiveTripDialog = false
-                    }) { Text("Xác nhận") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showFinishActiveTripDialog = false }) { Text("Đóng") }
-                }
-            )
-        }
     }
 }
 
@@ -1238,23 +1172,6 @@ private fun statusLabel(status: MonitoringStatus): String = when (status) {
     MonitoringStatus.STOPPED     -> "ĐÃ DỪNG"
 }
 
-private val GoogleRoadsTileSource = object : OnlineTileSourceBase(
-    "GoogleRoads",
-    0, 20, 256, ".png",
-    arrayOf(
-        "https://mt0.google.com/vt/lyrs=m&hl=vi&x=",
-        "https://mt1.google.com/vt/lyrs=m&hl=vi&x=",
-        "https://mt2.google.com/vt/lyrs=m&hl=vi&x=",
-        "https://mt3.google.com/vt/lyrs=m&hl=vi&x="
-    )
-) {
-    override fun getTileURLString(pMapTileIndex: Long): String {
-        val zoom = MapTileIndex.getZoom(pMapTileIndex)
-        val x = MapTileIndex.getX(pMapTileIndex)
-        val y = MapTileIndex.getY(pMapTileIndex)
-        return baseUrl + x + "&y=" + y + "&z=" + zoom
-    }
-}
 
 private fun createCarMarkerDrawable(context: android.content.Context): android.graphics.drawable.Drawable {
     val density = context.resources.displayMetrics.density
@@ -1340,11 +1257,9 @@ fun NativeMonitoringMapView(
 
     // Phân giải toạ độ ngầm các điểm dừng
     LaunchedEffect(stops) {
-        val resolved = stops.mapIndexed { index, stop ->
-            val point = resolveStopLocation(context, stop.address, index)
-            Pair(stop, point)
+        stopCoordinates = stops.mapNotNull { stop ->
+            resolveStopLocation(context, stop.address)?.let { stop to it }
         }
-        stopCoordinates = resolved
     }
 
     Box(modifier = modifier) {
@@ -1353,12 +1268,12 @@ fun NativeMonitoringMapView(
             factory = { ctx ->
                 Configuration.getInstance().userAgentValue = "DriverGuard/1.0 (Android; Graduate Thesis Project)"
                 MapView(ctx).apply {
-                    setTileSource(GoogleRoadsTileSource)
+                    setTileSource(TileSourceFactory.MAPNIK)
                     setMultiTouchControls(true)
                     isTilesScaledToDpi = true
                     controller.setZoom(14.0)
 
-                    val defaultCenter = if (currentGps != null && currentGps.latitude != 0.0) {
+                    val defaultCenter = if (currentGps != null) {
                         GeoPoint(currentGps.latitude, currentGps.longitude)
                     } else {
                         GeoPoint(10.7769, 106.7009)
@@ -1383,36 +1298,12 @@ fun NativeMonitoringMapView(
                 mapView.overlays.clear()
                 val allPoints = mutableListOf<GeoPoint>()
 
-                // 1. Tọa độ xe hiện tại
-                val carPoint = if (currentGps != null && currentGps.latitude != 0.0 && currentGps.longitude != 0.0) {
-                    GeoPoint(currentGps.latitude, currentGps.longitude)
-                } else {
-                    GeoPoint(10.7769, 106.7009)
-                }
-                allPoints.add(carPoint)
-
-                // 2. Điểm dừng
-                stopCoordinates.forEach { (_, point) ->
-                    allPoints.add(point)
-                }
-
-                // 3. Vẽ đường Polyline kết nối xe đến các điểm dừng
-                if (stopCoordinates.isNotEmpty()) {
-                    val polyline = Polyline(mapView).apply {
-                        outlinePaint.color = android.graphics.Color.parseColor("#1976D2")
-                        outlinePaint.strokeWidth = 10f
-                        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-                        outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
-                        val points = mutableListOf(carPoint)
-                        stopCoordinates.forEach { points.add(it.second) }
-                        setPoints(points)
-                    }
-                    mapView.overlays.add(polyline)
-                }
-
-                // 4. Marker các điểm dừng với cờ ghim đánh số
+                val carPoint = currentGps?.let { GeoPoint(it.latitude, it.longitude) }
+                carPoint?.let(allPoints::add)
+                // Marker các điểm dừng với cờ ghim đánh số
                 stopCoordinates.forEachIndexed { idx, (stop, point) ->
-                    val isNext = (activeStop?.address == stop.address)
+                    allPoints.add(point)
+                    val isNext = activeStop?.id == stop.id
                     val stopMarker = Marker(mapView).apply {
                         position = point
                         icon = createStopMarkerDrawable(context, idx + 1, stop.kind == "pickup")
@@ -1424,14 +1315,16 @@ fun NativeMonitoringMapView(
                 }
 
                 // 5. Marker Xe của bạn dạng radar GPS
-                val carMarker = Marker(mapView).apply {
-                    position = carPoint
-                    icon = createCarMarkerDrawable(context)
-                    title = "🚗 Xe của bạn"
-                    snippet = "Vận tốc: ${currentGps?.speedKmh?.toInt() ?: 0} km/h"
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                if (carPoint != null) {
+                    val carMarker = Marker(mapView).apply {
+                        position = carPoint
+                        icon = createCarMarkerDrawable(context)
+                        title = "🚗 Xe của bạn"
+                        snippet = "Vận tốc: ${currentGps?.speedDisplay ?: "—"}"
+                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    }
+                    mapView.overlays.add(carMarker)
                 }
-                mapView.overlays.add(carMarker)
 
                 // 6. Tự động zoom vừa vặn toàn bộ lộ trình
                 if (allPoints.size > 1) {
@@ -1439,24 +1332,20 @@ fun NativeMonitoringMapView(
                         val box = BoundingBox.fromGeoPoints(allPoints)
                         mapView.zoomToBoundingBox(box.increaseByScale(1.35f), true)
                     } catch (_: Exception) {
-                        mapView.controller.setCenter(carPoint)
+                        mapView.controller.setCenter(allPoints.first())
                     }
-                } else {
-                    mapView.controller.setCenter(carPoint)
+                } else if (allPoints.isNotEmpty()) {
+                    mapView.controller.setCenter(allPoints.first())
                     mapView.controller.setZoom(15.0)
                 }
+                mapView.overlays.add(CopyrightOverlay(mapView.context))
                 mapView.invalidate()
             }
         )
 
-        // 7. Nút Định vị lại tâm xe (Góc dưới bên phải)
-        FloatingActionButton(
+        if (currentGps != null) FloatingActionButton(
             onClick = {
-                val carPoint = if (currentGps != null && currentGps.latitude != 0.0) {
-                    GeoPoint(currentGps.latitude, currentGps.longitude)
-                } else {
-                    GeoPoint(10.7769, 106.7009)
-                }
+                val carPoint = GeoPoint(currentGps.latitude, currentGps.longitude)
                 mapViewInstance?.controller?.animateTo(carPoint, 16.0, 600L)
             },
             modifier = Modifier

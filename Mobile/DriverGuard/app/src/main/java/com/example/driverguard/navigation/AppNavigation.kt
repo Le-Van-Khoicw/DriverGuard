@@ -1,5 +1,6 @@
 package com.example.driverguard.navigation
 
+import android.widget.Toast
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -202,19 +203,23 @@ fun AppNavigation(notificationTripId: String? = null, onNotificationConsumed: ()
                 DispatchScreen(
                     viewModel = dispatch,
                     onMonitor = { trip ->
-                        monitoring.bindDispatchTrip(trip.id, trip.assignmentVersion)
-                        monitoring.startMonitoring()
-                        go(Routes.MONITORING)
+                        if (monitoring.bindDispatchTrip(trip.id, trip.assignmentVersion)) {
+                            monitoring.startMonitoring()
+                            go(Routes.MONITORING)
+                        } else {
+                            Toast.makeText(context, "Mở tab Giám sát để xử lý phiên hiện tại rồi thử lại.", Toast.LENGTH_LONG).show()
+                        }
                     },
-                    onFinishMonitoring = { trip -> monitoring.closeForDispatch(trip.id, trip.assignmentVersion) },
                     onStartTrip = { trip ->
                         // Server đã xác nhận startTrip → bind giám sát + tự kích hoạt AI và mở màn Giám sát
-                        monitoring.bindDispatchTrip(trip.id, trip.assignmentVersion)
-                        monitoring.startMonitoring()
-                        go(Routes.MONITORING)
+                        if (monitoring.bindDispatchTrip(trip.id, trip.assignmentVersion)) {
+                            monitoring.startMonitoring()
+                            go(Routes.MONITORING)
+                        } else {
+                            Toast.makeText(context, "Mở tab Giám sát để xử lý phiên hiện tại rồi thử lại.", Toast.LENGTH_LONG).show()
+                        }
                     },
-                    monitoringLinkedTripId = if (monitoringState.hasActiveTrip) monitoringState.dispatchTripId else null,
-                    currentGps = monitoringState.gpsLocation
+                    monitoringLinkedTripId = if (monitoringState.hasActiveTrip) monitoringState.dispatchTripId else null
                 )
             }
         }
@@ -227,12 +232,6 @@ fun AppNavigation(notificationTripId: String? = null, onNotificationConsumed: ()
                     onRecordStop = { stop, outcome, quantities, contact, note ->
                         if (activeTrip != null) {
                             dispatch.recordStop(activeTrip, stop, outcome, quantities, contact, note)
-                        }
-                    },
-                    onFinishTrip = { reason ->
-                        if (activeTrip != null) {
-                            dispatch.finishTrip(activeTrip, reason)
-                            monitoring.closeForDispatch(activeTrip.id, activeTrip.assignmentVersion)
                         }
                     }
                 )

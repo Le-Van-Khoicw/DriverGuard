@@ -1,6 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
 import { command, CompanyAccount, Alert, Driver, FleetVehicle, labels, Leave, Order, Report, Staff, Trip, watch, qualificationLabel } from '../api/dispatch';
-import { AlertTriangle, Bell, Car, ChevronRight, CircleUserRound, ClipboardList, FileBarChart, LayoutDashboard, LogOut, Menu, Moon, Package, Search, ShieldCheck, Sun, Truck, UserCog, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Bell, Car, ChevronRight, CircleUserRound, ClipboardList, FileBarChart, LayoutDashboard, LogOut, Menu, Moon, Package, Search, ShieldCheck, Sun, Truck, UserCog, Users, X } from 'lucide-react';
 import DriverManagement from './DriverManagement';
 import TripAssignmentForm, { driverAssignmentIssues } from './TripAssignmentForm';
 import DriverProfileReview from './DriverProfileReview';
@@ -24,12 +24,13 @@ function Field({ name, label, type = 'text', value, required = true, placeholder
   return <label>{label}<input name={name} type={type} defaultValue={value} placeholder={placeholder || ({ plate: "VD: 51C-123.45", capacityKg: "VD: 5000", name: "VD: Bình Dương → Khánh Hòa", reason: "VD: Tài xế nghỉ đột xuất, chuyển anh Nam thực hiện", employeeCode: "VD: NV003", displayName: "VD: Nguyễn Văn Nam", staffId: "UID từ danh sách tài khoản", location: "VD: Bãi xe công ty tại Nha Trang", cargoNote: "VD: Hàng nguyên kiện, còn 2 điểm giao" } as Record<string, string>)[name]} required={required} min={type === 'number' ? 0 : undefined} step={type === 'number' ? 'any' : undefined} /></label>;
 }
 function Dialog({ title, close, children }: { title: string; close: () => void; children: ReactNode }) {
-  return <div className="log-dialog-backdrop"><section role="dialog" aria-modal="true" aria-label={title} className="log-dialog"><header><h2>{title}</h2><button type="button" onClick={close} aria-label="Đóng">×</button></header>{children}</section></div>;
+  return <div className="log-dialog-backdrop"><section role="dialog" aria-modal="true" aria-label={title} className="log-dialog"><header><h2>{title}</h2><button className="log-back-button" type="button" onClick={close}><ArrowLeft aria-hidden="true" /> Quay lại</button></header>{children}</section></div>;
 }
 function Status({ value }: { value: string }) { return <span className={`log-status log-${value}`}>{state(value)}</span>; }
 
 export default function LogisticsPortal({ staff, logout }: { staff: Staff; logout: () => void }) {
   const [tab, setTab] = useState<Tab>('dashboard');
+  const [previousPages, setPreviousPages] = useState<{ tab: Tab; search: string }[]>([]);
   const [orders, setOrders] = useState<Order[]>([]), [trips, setTrips] = useState<Trip[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]), [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
   const [leaves, setLeaves] = useState<Leave[]>([]), [reports, setReports] = useState<Report[]>([]);
@@ -82,7 +83,22 @@ export default function LogisticsPortal({ staff, logout }: { staff: Staff; logou
   const match = (v: unknown) => JSON.stringify(v).toLocaleLowerCase('vi').includes(search.toLocaleLowerCase('vi'));
   const openDialog = (v: typeof dialog) => { setError(''); setDialog(v); };
   const unreadAlerts = alerts.filter(a => !a.status || a.status === 'NEW').length;
-  function selectTab(key: Tab) { setTab(key); setSearch(''); setError(''); setMenu(false); }
+  function showTab(key: Tab, query = '') {
+    setTab(key);
+    setSearch(query);
+    setError('');
+    setMenu(false);
+  }
+  function selectTab(key: Tab) {
+    if (key !== tab) setPreviousPages(pages => [...pages, { tab, search }]);
+    showTab(key);
+  }
+  function goBack() {
+    const previous = previousPages[previousPages.length - 1];
+    if (!previous) return;
+    setPreviousPages(pages => pages.slice(0, -1));
+    showTab(previous.tab, previous.search);
+  }
   return <div className="app-shell fleet-shell" onInvalidCapture={event => {
     const field = event.target as HTMLInputElement;
     // Browsers fire invalid for every missing field; show the first one the browser focuses.
@@ -107,6 +123,7 @@ export default function LogisticsPortal({ staff, logout }: { staff: Staff; logou
         <div className="topbar-actions"><button className="theme-toggle" aria-label={dark ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối"} title={dark ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối"} aria-pressed={dark} onClick={() => setDark(v => !v)}>{dark ? <Moon /> : <Sun />}<span>{dark ? "Tối" : "Sáng"}</span></button><button aria-label="Xem cảnh báo" onClick={() => selectTab('alerts')}><Bell />{unreadAlerts > 0 && <span className="notification-dot" />}</button><button className="admin-avatar" title={staff.displayName} aria-label="Mở hồ sơ của tôi" onClick={() => selectTab("profile")}><CircleUserRound /></button></div>
       </header>
       <main className="content"><div className="page-stack log-workspace">
+        {previousPages.length > 0 && <div><button className="log-back-button" type="button" onClick={goBack}><ArrowLeft aria-hidden="true" /> Quay lại</button></div>}
         <div className="page-heading"><div><p>TRUNG TÂM ĐIỀU HÀNH</p><h1>{tabs.find(([key]) => key === tab)?.[1]}</h1><span>{tab === 'dashboard' ? 'Tổng quan vận tải và cảnh báo tài xế từ DriverGuard.' : 'Quản lý chuyến hàng và theo dõi kết quả thực hiện.'}</span></div></div>
         {tab === 'dashboard' && <FleetOverview orders={orders} trips={trips} leaves={leaves} alerts={alerts} driverName={driverName} openAlerts={() => selectTab('alerts')} openTrips={() => selectTab('trips')} />}
       {loaded.length < 7 && !Object.keys(errors).length && <p role="status">Đang tải dữ liệu vận tải…</p>}
@@ -118,11 +135,11 @@ export default function LogisticsPortal({ staff, logout }: { staff: Staff; logou
       {tab === 'staff' && admin && <><StaffAccessForm account={staffAccount} employee={staffMembers.find(s => s.id === staffAccount?.uid)} busy={busy} chooseAccount={() => selectTab('accounts')} save={data => void run('saveStaff', data)} /><div className="log-table"><table><thead><tr><th>Nhân viên</th><th>Vai trò / liên hệ</th><th>Quyền</th></tr></thead><tbody>{staffMembers.map(s => <tr key={s.id}><td>{s.displayName}<small>{s.employeeCode}</small></td><td>{s.role}<small>{s.phone || "Chưa có SĐT"}</small><small>{s.email}</small></td><td>{s.active ? 'Hoạt động' : 'Đã thu hồi'}</td></tr>)}</tbody></table></div></>}
       {tab === 'orders' && <div className="log-table"><table><thead><tr><th>Đơn / khách hàng</th><th>Nhận → giao</th><th>Hàng hóa</th><th>Thời gian</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{visibleOrders.filter(match).map(o => <tr key={o.id}><td><strong>{idLabel(o.id)} · {o.customer}</strong><small>{o.customerPhone}</small><small>Người tạo: <StaffIdentity uid={o.createdBy} name={o.createdByName} email={o.createdByEmail} /></small></td><td><strong>{o.sender} · {o.senderPhone}</strong><small>{o.pickupAddress}</small><strong>→ {o.receiver} · {o.receiverPhone}</strong><small>{o.deliveryAddress}</small></td><td>{o.items.map((i, k) => <small key={k}>{i.name}: {i.quantity} {i.unit}</small>)}<strong>{o.weightKg} kg</strong><small>{o.note}</small></td><td>{date(o.start)}<small>Hạn giao: {date(o.end)}</small></td><td><Status value={o.status} /><small>{o.tripId && `Chuyến ${idLabel(o.tripId)}`}</small></td><td>{o.status === 'ready' && !o.tripId ? <div className="account-actions"><button disabled={busy} onClick={() => { setEditOrder(o); openDialog('order'); }}>Sửa đơn</button><button disabled={busy} onClick={() => setDeleteOrder(o)}>Xóa đơn</button></div> : <small>Đã xếp chuyến</small>}</td></tr>)}</tbody></table>{!visibleOrders.length && <p className="log-empty">Chưa có đơn vận chuyển. Tạo đơn trước khi lập chuyến.</p>}</div>}
       {tab === 'trips' && <div className="log-cards">{trips.filter(match).sort((a, b) => b.updatedAt - a.updatedAt).map(t => <article key={t.id}><div className="log-between"><h3>{t.name}</h3><Status value={t.status} /></div><p>{idLabel(t.id)} · {t.vehiclePlate} · {t.driverName}</p><p>{date(t.start)} → {date(t.end)}</p><p>{t.orderIds.length} đơn · {t.stops.filter(s => s.status !== 'pending').length}/{t.stops.length} điểm đã xử lý</p>{t.declineReason && <p>Lý do từ chối: {t.declineReason}</p>}<button onClick={() => { setError(''); setSelectedTrip(t); }}>Xem chuyến / xử lý</button></article>)}{!trips.length && <p className="log-empty">Chưa có chuyến. Chọn đơn, tài xế và xe để phân công.</p>}</div>}
-      {tab === 'drivers' && <DriverManagement drivers={drivers} trips={trips} admin={admin} busy={busy} search={search} openProfile={uid => { setError(''); setSelectedDriverId(uid); }} saveAccount={data => void run('driverStatus', data)} />}
+      {tab === 'drivers' && <DriverManagement drivers={drivers} trips={trips} reports={reports} admin={admin} busy={busy} search={search} openProfile={uid => { setError(''); setSelectedDriverId(uid); }} saveAccount={data => void run('driverStatus', data)} />}
       {tab === 'vehicles' && <div className="log-cards">{vehicles.filter(match).map(v => <article key={v.id}><h3>{v.plate}</h3>{v.name && <p>{v.name}</p>}<p>Tải trọng: {v.capacityKg} kg</p><Status value={v.status} /><p>{activeTrips.filter(t => t.vehicleId === v.id).length} chuyến chưa kết thúc</p>{admin && <button onClick={() => { setEditVehicle(v); openDialog('vehicle'); }}>Sửa xe</button>}</article>)}</div>}
       {tab === 'leaves' && <div className="log-cards">{leaves.filter(match).sort((a, b) => b.start - a.start).map(l => <article key={l.id}><div className="log-between"><h3>{driverName(l.driverId)}</h3><Status value={l.status} /></div><p>{date(l.start)} → {date(l.end)}</p><p>{l.reason}</p>{l.status === 'pending' && <p>Chuyến có thể ảnh hưởng: {activeTrips.filter(t => t.driverId === l.driverId && t.start < l.end && l.start < t.end).map(t => t.name).join(', ') || 'Không có theo lịch hiện tại'}</p>}{l.affectedTripIds?.length ? <p>{l.affectedTripIds.length} chuyến cần phân công lại.</p> : null}{admin && l.status === 'pending' && <div className="log-actions"><button disabled={busy} onClick={() => void run('reviewLeave', { leaveId: l.id, status: 'approved' })}>Duyệt nghỉ</button><button disabled={busy} onClick={() => void run('reviewLeave', { leaveId: l.id, status: 'rejected' })}>Từ chối</button></div>}</article>)}</div>}
       {tab === 'alerts' && <div className="log-cards">{alerts.filter(match).sort((a, b) => b.timestamp - a.timestamp).map(a => <article key={a.id}><h3>{driverName(a.userId)} · {date(a.timestamp)}</h3><p>Chuyến: {a.dispatchTripId ? trips.find(t => t.id === a.dispatchTripId)?.name || idLabel(a.dispatchTripId) : 'Phiên độc lập / dữ liệu cũ'}</p><p>EAR: {a.ear?.toFixed(3) ?? '—'} · mắt nhắm {a.closedDurationSec?.toFixed(1) ?? '—'} giây</p>{a.latitude != null && a.longitude != null && <a href={`https://www.google.com/maps/search/?api=1&query=${a.latitude},${a.longitude}`} target="_blank" rel="noreferrer">Vị trí ghi nhận cảnh báo</a>}<form onSubmit={e => { const f = formValues(e); void run('reviewAlert', { eventId: a.id, ...f }); }}><label>Trạng thái xử lý<select name="status" defaultValue={a.status || 'NEW'}><option value="NEW">Mới</option><option value="ACKNOWLEDGED">Đã xác nhận</option><option value="RESOLVED">Đã xử lý</option></select></label><Field name="reason" label="Ghi chú điều phối" value={a.note} required={false} /><button disabled={busy}>Lưu xử lý</button></form></article>)}</div>}
-      {tab === 'reports' && <><p>Điểm theo quy tắc thử nghiệm trên dữ liệu mắt quan sát được. Mỗi phiên giữ đúng tài xế và phiên bản phân công.</p><div className="log-table"><table><thead><tr><th>Chuyến / phiên</th><th>Tài xế</th><th>Thời điểm</th><th>Điểm / độ bao phủ</th><th>Nhận xét</th></tr></thead><tbody>{reports.filter(match).sort((a, b) => b.startTime - a.startTime).map(r => <tr key={r.id}><td>{r.dispatchTripId ? trips.find(t => t.id === r.dispatchTripId)?.name || idLabel(r.dispatchTripId) : 'Phiên giám sát độc lập'}<small>Phiên {idLabel(r.id)} · v{r.assignmentVersion ?? '—'}</small></td><td>{driverName(r.userId)}</td><td>{date(r.startTime)}</td><td>{r.hasSufficientData && r.safetyScore != null ? `${r.safetyScore}/100` : 'Chưa đủ dữ liệu'}<small>Quan sát {((r.measurementCoverage || 0) * 100).toFixed(0)}% · {r.totalAlerts} cảnh báo</small></td><td>{r.aiDiagnosis}</td></tr>)}</tbody></table></div></>}
+      {tab === 'reports' && <><p>Điểm quan sát được tính từ thời gian mắt quan sát hợp lệ và các lần nhắm mắt kéo dài.</p><div className="log-table"><table><thead><tr><th>Chuyến / phiên</th><th>Tài xế</th><th>Thời điểm</th><th>Điểm / độ bao phủ</th><th>Nhận xét</th></tr></thead><tbody>{reports.filter(match).sort((a, b) => b.startTime - a.startTime).map(r => <tr key={r.id}><td>{r.dispatchTripId ? trips.find(t => t.id === r.dispatchTripId)?.name || idLabel(r.dispatchTripId) : 'Phiên giám sát độc lập'}<small>Phiên {idLabel(r.id)} · v{r.assignmentVersion ?? '—'}</small></td><td>{driverName(r.userId)}</td><td>{date(r.startTime)}</td><td>{r.hasSufficientData && r.safetyScore != null ? `${r.safetyScore}/100` : 'Chưa đủ dữ liệu'}<small>Quan sát {((r.measurementCoverage || 0) * 100).toFixed(0)}% · {r.totalAlerts} cảnh báo</small></td><td>{r.aiDiagnosis}</td></tr>)}</tbody></table></div></>}
     </div></main>
     </div>
 

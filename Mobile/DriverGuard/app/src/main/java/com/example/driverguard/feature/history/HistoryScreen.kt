@@ -110,6 +110,67 @@ fun HistoryScreen(onAlertClick: (String) -> Unit) {
             }
         }
 
+        // ── Card Điểm An Toàn Tích Lũy Nhân Viên (Time-Weighted Cumulative Score) ──
+        val scoredTrips = savedTrips.filter { it.safetyScore != null }
+        if (scoredTrips.isNotEmpty()) {
+            val totalDuration = scoredTrips.sumOf { maxOf(it.durationSec, 1L) }
+            val weightedScore = (scoredTrips.sumOf { (it.safetyScore ?: 0) * maxOf(it.durationSec, 1L) }.toDouble() / totalDuration).toInt().coerceIn(0, 100)
+            val cumulativeGrade = when {
+                weightedScore >= 90 -> "Hạng A · Xuất sắc"
+                weightedScore >= 70 -> "Hạng B · An toàn"
+                weightedScore >= 40 -> "Hạng C · Cần chú ý"
+                else -> "Hạng D · Rủi ro cao"
+            }
+            val gradeColor = when {
+                weightedScore >= 90 -> c.safe
+                weightedScore >= 70 -> c.warning
+                else -> c.danger
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = c.card),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Shield, contentDescription = null, tint = gradeColor, modifier = Modifier.size(20.dp))
+                            Text("Chỉ số an toàn tích lũy", color = c.text, fontSize = font.md, fontWeight = font.bold)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(gradeColor.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(cumulativeGrade, color = gradeColor, fontSize = font.xs, fontWeight = font.bold)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Column {
+                            Text("$weightedScore/100", color = c.text, fontSize = font.xxl, fontWeight = font.bold)
+                            Text("Điểm trung bình có trọng số thời gian", color = c.textMuted, fontSize = font.xs)
+                        }
+                        Text("${scoredTrips.size} chuyến đã đánh giá", color = c.primary, fontSize = font.xs, fontWeight = font.semibold)
+                    }
+                }
+            }
+        }
+
         // ── Card Biểu đồ cột 7 ngày (7-Day Bar Chart) ──
         WeeklyBarChartCard(
             stats = weeklyStats,

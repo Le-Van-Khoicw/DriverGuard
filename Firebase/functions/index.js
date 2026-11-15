@@ -403,6 +403,9 @@ export async function handleDispatchCommand(request) {
       driverCalendar.reservations[tripRef.id] = period; vehicleCalendar.reservations[tripRef.id] = period;
       trip.status = 'in_progress'; trip.actualStart = now;
     } else if (action === 'updateStop') {
+      if (p.reason === 'Tự động ghi nhận khi hoàn thành chuyến') {
+        fail('Ứng dụng cũ tự điền kết quả giao hàng. Cập nhật app và ghi lại kết quả từng điểm.', 'failed-precondition');
+      }
       if (isStaff || trip.status !== 'in_progress') fail('Tài xế chỉ cập nhật điểm khi chuyến đang chạy');
       const index = trip.stops.findIndex(s => s.status === 'pending');
       if (index < 0 || trip.stops[index].id !== p.stopId) fail('Cần xử lý điểm dừng theo thứ tự');
@@ -421,23 +424,12 @@ export async function handleDispatchCommand(request) {
       trip.stops = trip.stops.map((s, i) => i === index ? { ...s, status: p.outcome, quantities, note, actualContact: text(p.actualContact, 'người giao/nhận thực tế', 200), completedAt: now, driverId: uid, assignmentVersion: trip.assignmentVersion } : s);
       if (stop.kind === 'delivery') tx.update(ref('transportOrders', stop.orderId), { status: p.outcome === 'full' ? 'delivered' : 'delivery_issue', updatedAt: now, deliveryResult: trip.stops[index] });
     } else if (action === 'finishTrip') {
+      if (p.reason === 'Hoàn thành từ màn hình giám sát') {
+        fail('Kết thúc giám sát không hoàn thành giao hàng. Xác nhận trong tab Chuyến.', 'failed-precondition');
+      }
       if (isStaff || trip.status !== 'in_progress') fail('Chỉ tài xế kết thúc chuyến đang chạy');
-      // Tự động hoàn thành các điểm dừng còn pending nếu kết thúc chuyến trực tiếp
-      trip.stops = trip.stops.map(s => {
-        if (s.status === 'pending') {
-          return {
-            ...s,
-            status: 'full',
-            quantities: (s.items || []).map(it => it.quantity),
-            actualContact: s.contact || 'Người nhận',
-            completedAt: now,
-            driverId: uid,
-            assignmentVersion: trip.assignmentVersion,
-            note: 'Tự động hoàn thành khi kết thúc chuyến'
-          };
-        }
-        return s;
-      });
+      const unfinishedStop = trip.stops.find(stop => stop.status === 'pending');
+      if (unfinishedStop) fail('Cần ghi kết quả cho điểm dừng: ' + (unfinishedStop.address || unfinishedStop.id), 'failed-precondition');
       for (const stop of trip.stops) {
         if (stop.kind === 'delivery') {
           tx.update(ref('transportOrders', stop.orderId), {

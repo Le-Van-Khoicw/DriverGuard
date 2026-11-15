@@ -5,7 +5,10 @@ import android.content.Context
 import android.location.Geocoder
 import android.location.Location
 import android.os.Build
+import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -19,18 +22,29 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.Locale
+import kotlin.math.roundToInt
+
+private const val MAX_FIX_AGE_MS = 15_000L
 
 data class GpsLocation(
     val latitude: Double,
     val longitude: Double,
-    val speedKmh: Float = 0f,
-    val address: String? = null
+    val speedKmh: Float? = null,
+    val address: String? = null,
+    val accuracyMeters: Float? = null,
+    val elapsedRealtimeMs: Long = SystemClock.elapsedRealtime()
 ) {
     val coordinateDisplay: String
         get() = "${"%.4f".format(latitude)}, ${"%.4f".format(longitude)}"
 
     val speedDisplay: String
-        get() = "${speedKmh.toInt()} km/h"
+        get() = speedKmh?.let { "${it.roundToInt()} km/h" } ?: "—"
+
+    val accuracyDisplay: String
+        get() = accuracyMeters?.let { "Độ chính xác ±${it.roundToInt()} m" } ?: "Đã nhận vị trí"
+
+    val isFresh: Boolean
+        get() = SystemClock.elapsedRealtime() - elapsedRealtimeMs in 0 until MAX_FIX_AGE_MS
 }
 
 /**
@@ -43,6 +57,10 @@ class LocationTracker(private val context: Context) {
 
     private val _currentLocation = MutableStateFlow<GpsLocation?>(null)
     val currentLocation: StateFlow<GpsLocation?> = _currentLocation.asStateFlow()
+
+    private val handler = Handler(Looper.getMainLooper())
+    private val expireLocation = Runnable { _currentLocation.value = null }
+    private var tracking = false
 
     private val geocoder: Geocoder = Geocoder(context, Locale("vi", "VN"))
     private val scope = CoroutineScope(Dispatchers.IO)
@@ -57,8 +75,10 @@ class LocationTracker(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun startTracking() {
+        if (tracking) return
+        tracking = true
         try {
-            // Lấy vị trí nhanh gần nhất trước
+            // Dùng vị trí gần nhất nếu mẫu còn mới.
             fusedClient.lastLocation.addOnSuccessListener { location ->
                 location?.let { updateLocation(it) }
             }
@@ -66,16 +86,19 @@ class LocationTracker(private val context: Context) {
             // Đăng ký nhận cập nhật định kỳ mỗi 3 giây
             val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 3000L)
                 .setMinUpdateIntervalMillis(1500L)
-                .setMinUpdateDistanceMeters(2f)
                 .build()
 
             fusedClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+                .addOnFailureListener { Log.w("DriverGuardLocation", "Không nhận được cập nhật GPS", it) }
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
     fun stopTracking() {
+        tracking = false
+        handler.removeCallbacks(expireLocation)
+        _currentLocation.value = null
         try {
             fusedClient.removeLocationUpdates(locationCallback)
         } catch (e: Exception) {
@@ -84,19 +107,32 @@ class LocationTracker(private val context: Context) {
     }
 
     private fun updateLocation(loc: Location) {
-        val speedKmh = if (loc.hasSpeed()) loc.speed * 3.6f else 0f
+        if (!tracking) return
+        val fixTimeMs = loc.elapsedRealtimeNanos / 1_000_000L
+        val ageMs = SystemClock.elapsedRealtime() - fixTimeMs
+        if (ageMs !in 0 until MAX_FIX_AGE_MS ||
+            fixTimeMs <= (_currentLocation.value?.elapsedRealtimeMs ?: Long.MIN_VALUE)) return
+        val speedKmh = if (loc.hasSpeed()) loc.speed * 3.6f else null
         val lat = loc.latitude
         val lng = loc.longitude
 
-        // Cập nhật tọa độ trước ngay lập tức
-        _currentLocation.value = GpsLocation(
+        val previous = _currentLocation.value
+        val samePoint = previous?.latitude == lat && previous?.longitude == lng
+        handler.removeCallbacks(expireLocation)
+        handler.postDelayed(expireLocation, MAX_FIX_AGE_MS - ageMs)
+
+        // Cập nhật tọa độ ngay, địa chỉ có thể đến sau.
+        val fix = GpsLocation(
             latitude = lat,
             longitude = lng,
             speedKmh = speedKmh,
-            address = _currentLocation.value?.address
+            address = previous?.address?.takeIf { samePoint },
+            accuracyMeters = if (loc.hasAccuracy()) loc.accuracy else null,
+            elapsedRealtimeMs = fixTimeMs
         )
 
-        // Tra cứu địa chỉ ngầm (Reverse Geocoding)
+        _currentLocation.value = fix
+        if (samePoint && previous?.address != null) return
         scope.launch {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -105,7 +141,7 @@ class LocationTracker(private val context: Context) {
                             listOfNotNull(it.thoroughfare, it.subAdminArea, it.adminArea).joinToString(", ")
                         }
                         if (!addr.isNullOrBlank()) {
-                            _currentLocation.value = _currentLocation.value?.copy(address = addr)
+                            _currentLocation.compareAndSet(fix, fix.copy(address = addr))
                         }
                     }
                 } else {
@@ -115,7 +151,7 @@ class LocationTracker(private val context: Context) {
                         listOfNotNull(it.thoroughfare, it.subAdminArea, it.adminArea).joinToString(", ")
                     }
                     if (!addr.isNullOrBlank()) {
-                        _currentLocation.value = _currentLocation.value?.copy(address = addr)
+                        _currentLocation.compareAndSet(fix, fix.copy(address = addr))
                     }
                 }
             } catch (_: Exception) {

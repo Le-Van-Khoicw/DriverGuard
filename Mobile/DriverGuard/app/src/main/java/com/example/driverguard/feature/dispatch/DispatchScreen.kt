@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.driverguard.core.location.GpsLocation
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -52,10 +51,8 @@ fun StatusBadge(status: String) {
 fun DispatchScreen(
     viewModel: DispatchViewModel,
     onMonitor: (AssignedTrip) -> Unit,
-    onFinishMonitoring: (AssignedTrip) -> Unit,
     onStartTrip: (AssignedTrip) -> Unit = {},
-    monitoringLinkedTripId: String? = null,
-    currentGps: GpsLocation? = null
+    monitoringLinkedTripId: String? = null
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsState()
@@ -354,7 +351,7 @@ fun DispatchScreen(
                         ) {
                             Icon(Icons.Outlined.Navigation, contentDescription = null, Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Tiếp tục lái xe & Dẫn đường", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            Text(if (monitoringLinkedTripId == trip.id) "Giám sát đang tạm dừng · Tiếp tục" else "Mở giám sát tài xế", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -484,7 +481,7 @@ fun DispatchScreen(
                 ) {
                     Icon(Icons.Outlined.CheckCircle, contentDescription = null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Xác nhận hoàn thành chuyến")
+                    Text("Xác nhận hoàn thành giao hàng")
                 }
             }
             if (trip.status == "completion_pending") {
@@ -607,10 +604,12 @@ fun DispatchScreen(
     // ===================== POPUP LÝ DO HOÀN THÀNH / TỪ CHỐI =====================
     if (reasonAction != null) {
         val action = reasonAction!!
+        val requiresReason = action == "declineTrip" ||
+            (action == "finishTrip" && trip?.stops?.any { it.status == "partial" || it.status == "failed" } == true)
         var reason by remember(action) { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { reasonAction = null },
-            title = { Text(when (action) { "discard" -> "Xử lý lệnh"; "finishTrip" -> "Hoàn thành chuyến"; else -> "Lý do từ chối" }) },
+            title = { Text(when (action) { "discard" -> "Xử lý lệnh"; "finishTrip" -> "Hoàn thành giao hàng"; else -> "Lý do từ chối" }) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (action == "discard") {
@@ -619,7 +618,11 @@ fun DispatchScreen(
                         OutlinedTextField(
                             value = reason,
                             onValueChange = { reason = it },
-                            label = { Text(if (action == "finishTrip") "Ghi chú kết thúc (không bắt buộc)" else "Nhập lý do từ chối") },
+                            label = { Text(when {
+                                action == "declineTrip" -> "Nhập lý do từ chối"
+                                requiresReason -> "Ghi chú kết thúc có vấn đề"
+                                else -> "Ghi chú kết thúc (không bắt buộc)"
+                            }) },
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -627,12 +630,11 @@ fun DispatchScreen(
             },
             confirmButton = {
                 Button(
-                    enabled = action != "declineTrip" || reason.isNotBlank(),
+                    enabled = !requiresReason || reason.isNotBlank(),
                     onClick = {
                         if (action == "discard") viewModel.discardRejected()
                         else if (trip != null && action == "finishTrip") {
                             viewModel.finishTrip(trip, reason)
-                            onFinishMonitoring(trip)
                         } else if (trip != null) {
                             viewModel.onlineCommand(action, trip, mapOf("reason" to reason))
                         }

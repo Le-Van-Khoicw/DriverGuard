@@ -17,8 +17,8 @@ class TripScoringTest {
     }
 
     @Test fun tooShortOrPoorlyCoveredTripIsUnscored() {
-        assertNull(score(TripObservationStats(validMs = 29_000), 30_000).safetyScore)
-        assertNull(score(TripObservationStats(validMs = 35_000), 100_000).safetyScore)
+        assertNull(score(TripObservationStats(validMs = 5_000), 30_000).safetyScore)
+        assertNull(score(TripObservationStats(validMs = 15_000), 100_000).safetyScore)
     }
 
     @Test fun wellObservedOpenEyesHaveScoreAndActualAverageEar() {

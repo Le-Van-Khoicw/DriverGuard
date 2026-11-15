@@ -11,9 +11,6 @@ import com.example.driverguard.feature.monitoring.ai.*
 import com.example.driverguard.feature.monitoring.data.ActiveTrip
 import com.example.driverguard.feature.monitoring.data.TripLocalStore
 import com.google.firebase.auth.FirebaseAuth
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -188,42 +185,7 @@ class MonitoringViewModel(application: Application) : AndroidViewModel(applicati
         persistCheckpoint()
     }
 
-    var isSimulatingDriving by mutableStateOf(false)
-        private set
-    private var simulationJob: Job? = null
-
-    fun toggleSimulateDriving() {
-        isSimulatingDriving = !isSimulatingDriving
-        if (isSimulatingDriving) {
-            simulationJob?.cancel()
-            simulationJob = viewModelScope.launch {
-                while (isSimulatingDriving) {
-                    val simSpeed = (46.0 + Math.random() * 11.0).toFloat()
-                    val current = _uiState.value.gpsLocation ?: GpsLocation(10.7769, 106.7009)
-                    _uiState.value = _uiState.value.copy(
-                        gpsLocation = current.copy(speedKmh = simSpeed)
-                    )
-                    delay(1200)
-                }
-            }
-        } else {
-            simulationJob?.cancel()
-            simulationJob = null
-            _uiState.value = _uiState.value.copy(
-                gpsLocation = _uiState.value.gpsLocation?.copy(speedKmh = 0f)
-            )
-        }
-    }
-
-    fun simulateArriveAtStop(address: String) {
-        val current = _uiState.value.gpsLocation ?: GpsLocation(10.7769, 106.7009)
-        _uiState.value = _uiState.value.copy(
-            gpsLocation = current.copy(speedKmh = 0f, address = address)
-        )
-    }
-
     fun onLocationUpdated(location: GpsLocation?) {
-        if (isSimulatingDriving) return
         _uiState.value = _uiState.value.copy(gpsLocation = location)
     }
 
@@ -267,7 +229,7 @@ class MonitoringViewModel(application: Application) : AndroidViewModel(applicati
         val newAlert = result.shouldAlert && !alertWasActive && now - lastAlertMs > 5_000
         if (newAlert) {
             lastAlertMs = now
-            val gps = _uiState.value.gpsLocation
+            val gps = _uiState.value.gpsLocation?.takeIf { it.isFresh }
             val event = AlertEvent(userId = ownerUid, ear = ear?.toDouble() ?: 0.0,
                 closedDurationSec = result.closedDurationMs / 1000.0, warningIndex = alerts.size + 1,
                 latitude = gps?.latitude, longitude = gps?.longitude, speedKmh = gps?.speedKmh,

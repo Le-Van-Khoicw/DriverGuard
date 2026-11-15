@@ -40,7 +40,7 @@ fun TripSummaryDialog(summary: TripSummary, onDismiss: () -> Unit) {
                         Text("Điểm theo dữ liệu quan sát", color = colors.textMuted)
                         Text(summary.scoreLabel, style = MaterialTheme.typography.headlineMedium, color = colors.text)
                         if (summary.safetyScore != null) Text("Hạng ${summary.scoreGrade} · ${summary.riskLevel.label}", color = colors.text)
-                        Text("Thang điểm thử nghiệm; không xác nhận chuyến xe an toàn.", color = colors.textMuted,
+                        Text("Điểm phản ánh dữ liệu mắt quan sát được trong phiên.", color = colors.textMuted,
                             style = MaterialTheme.typography.bodySmall)
                     }
                 }

@@ -18,11 +18,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import com.example.driverguard.feature.dispatch.GoogleRoadsTileSourceMini
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import com.example.driverguard.feature.dispatch.resolveStopLocation
 import org.osmdroid.config.Configuration
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.CopyrightOverlay
 import org.osmdroid.views.overlay.Marker
 
 /** In-app navigation preview using OpenStreetMap + Google Maps Intent. */
@@ -36,7 +37,7 @@ fun GoogleNavigationMap(address: String?, modifier: Modifier = Modifier, stateKe
 
     LaunchedEffect(address) {
         if (!address.isNullOrBlank()) {
-            osmDestinationPoint = resolveStopLocation(context, address, 0)
+            osmDestinationPoint = resolveStopLocation(context, address)
         }
     }
 
@@ -63,7 +64,7 @@ fun GoogleNavigationMap(address: String?, modifier: Modifier = Modifier, stateKe
                 factory = { ctx ->
                     Configuration.getInstance().userAgentValue = "DriverGuard/1.0 (Android; Graduate Thesis Project)"
                     MapView(ctx).apply {
-                        setTileSource(GoogleRoadsTileSourceMini)
+                        setTileSource(TileSourceFactory.MAPNIK)
                         setMultiTouchControls(true)
                         isTilesScaledToDpi = true
                         controller.setZoom(15.0)
@@ -83,6 +84,7 @@ fun GoogleNavigationMap(address: String?, modifier: Modifier = Modifier, stateKe
                         mapView.overlays.add(marker)
                         mapView.controller.setCenter(point)
                     }
+                    mapView.overlays.add(CopyrightOverlay(mapView.context))
                     mapView.invalidate()
                 }
             )
@@ -91,7 +93,7 @@ fun GoogleNavigationMap(address: String?, modifier: Modifier = Modifier, stateKe
             Column(Modifier.fillMaxWidth().padding(12.dp)) {
                 if (!address.isNullOrBlank()) {
                     Text(
-                        text = "Điểm đến: $address",
+                        text = if (osmDestinationPoint != null) "Điểm đến: $address" else "Chưa xác định tọa độ: $address",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )

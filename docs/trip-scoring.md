@@ -51,24 +51,20 @@ Nó đo thời gian theo các khoảng giữa mẫu, độc lập với số log
   đoạn nhắm từ 2 giây. Khi chuỗi vượt 2 giây, tính cả phần 2 giây đầu.
 - EAR trung bình có trọng số thời gian, lấy từ toàn bộ quan sát hợp lệ.
 - Tạm dừng, hiệu chỉnh, mất hình và khoảng app bị đóng không cộng thời gian hợp lệ.
-- Độ bao phủ = thời gian hợp lệ / toàn bộ thời gian chuyến, **bao gồm cả tạm dừng**
-  trong mẫu số. Đây là lựa chọn bảo thủ vì app không biết tài xế làm gì khi tắt giám sát.
+- Độ bao phủ = thời gian quan sát hợp lệ / thời gian giám sát. Khi thiếu thống kê thời gian giám sát, dùng thời lượng phiên.
 - Tỷ lệ mắt nhắm = thời gian mắt nhắm / thời gian hợp lệ. UI không gọi con số này
   là PERCLOS vì chưa áp dụng đầy đủ định nghĩa/đánh giá PERCLOS chuẩn.
 
-## Điểm `observation-rules-v1`
+## Điểm `observation-rules-v3`
 
 Đây là **thang điểm thử nghiệm do dự án quy định**, chưa được huấn luyện hoặc
 kiểm chứng là mức độ an toàn thực. TP/FP/TN/FN đo bộ phát hiện, không phải nhãn
 đúng/sai cho điểm chuyến. Các trọng số dưới đây cần được hiệu chỉnh bằng dữ liệu
 và đánh giá độc lập nếu muốn đưa ra kết luận rộng hơn.
 
-Chỉ chấm nếu đồng thời:
+Chỉ chấm khi có ít nhất **10 giây quan sát hợp lệ và độ bao phủ ít nhất 40%**, hoặc khi có **ít nhất 20 giây quan sát hợp lệ**.
 
-1. Ít nhất **30 giây quan sát mắt hợp lệ**.
-2. Độ bao phủ toàn chuyến ít nhất **70%**.
-
-Thiếu một trong hai điều kiện: điểm `null`, UI hiện **Chưa đủ dữ liệu**. Vẫn lưu
+Nếu chưa đủ điều kiện: điểm `null`, UI hiện **Chưa đủ dữ liệu**. Vẫn lưu
 thống kê và sự kiện; tuyệt đối không biến thiếu dữ liệu thành điểm 100.
 
 ```text
@@ -81,8 +77,7 @@ giới hạn điểm: 0..100
 ```
 
 Ví dụ: chuyến 40 giây, quan sát hợp lệ 35 giây, không có đoạn nhắm kéo dài được
-100 điểm theo quy tắc này. Chuyến 100 giây nhưng chỉ quan sát được 35 giây không
-được chấm. Cùng một sự kiện trên thời gian quan sát dài hơn có tần suất thấp hơn.
+100 điểm theo quy tắc này. Phiên giám sát 100 giây có 15 giây quan sát hợp lệ không được chấm. Cùng một sự kiện trên thời gian quan sát dài hơn có tần suất thấp hơn.
 
 Hạng A ≥90, B ≥70, C ≥40, D <40. Hạng là cách trình bày thang điểm, không phải
 chẩn đoán sức khỏe hoặc xác nhận chuyến xe an toàn. Không phạt theo ngưỡng demo

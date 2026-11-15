@@ -8,10 +8,10 @@ import java.util.UUID
 import kotlin.math.roundToInt
 
 enum class TripRiskLevel(val label: String, val badgeColorHex: Long) {
-    SAFE("Tỉnh táo - An toàn", 0xFF10B981),
+    SAFE("Ít dấu hiệu quan sát được", 0xFF10B981),
     CAUTION("Cần chú ý", 0xFFF59E0B),
-    HIGH_RISK("Nhiều dấu hiệu mệt mỏi", 0xFFEF4444),
-    CRITICAL("Nguy cơ ngủ gật cao", 0xFF991B1B)
+    HIGH_RISK("Điểm quan sát thấp", 0xFFEF4444),
+    CRITICAL("Điểm quan sát rất thấp", 0xFF991B1B)
 }
 
 data class TripSummary(
@@ -53,7 +53,7 @@ data class TripSummary(
 
 /** Transparent experimental scoring policy, not a trained safety predictor. */
 object TripAiAnalyzer {
-    const val SCORING_VERSION = "observation-rules-v2"
+    const val SCORING_VERSION = "observation-rules-v3"
     const val MIN_VALID_MS = 10_000L
     const val MIN_COVERAGE = 0.40
 
@@ -80,9 +80,6 @@ object TripAiAnalyzer {
 
         val score = if (sufficient) {
             (100 - penalty).roundToInt().coerceIn(0, 100)
-        } else if (validMs >= 5_000L) {
-            // Cho phép đánh giá phiên ngắn (5s - 10s) khi làm bài demo
-            (95 - penalty).roundToInt().coerceIn(0, 100)
         } else null
 
         val risk = when {
@@ -95,17 +92,18 @@ object TripAiAnalyzer {
 
         val diagnosis = when {
             score == null -> {
-                "Thời gian quan sát quá ngắn (dưới 5 giây). Hãy giữ camera nhìn rõ khuôn mặt khi lái xe để AI ghi nhận dữ liệu."
+                "Chưa đủ thời gian quan sát mắt hợp lệ hoặc độ bao phủ để tính điểm."
             }
             observations.prolongedClosureCount == 0 && alerts.isEmpty() -> {
-                "✅ Chuyến xe an toàn! Tài xế duy trì trạng thái tỉnh táo và tập trung cao độ trong suốt hành trình. Không ghi nhận dấu hiệu buồn ngủ hay mắt nhắm kéo dài nguy hiểm."
+                "Không ghi nhận cảnh báo nhắm mắt kéo dài trong thời gian quan sát hợp lệ."
             }
             observations.prolongedClosureCount in 1..2 -> {
-                "⚠️ Ghi nhận ${observations.prolongedClosureCount} lần mắt nhắm kéo dài (lần lâu nhất: ${"%.1f".format(observations.longestClosedMs / 1000.0)}s). Tài xế có dấu hiệu mệt mỏi nhẹ. Khuyến nghị uống nước hoặc dừng xe nghỉ 15 phút nếu đi đường dài."
+                "⚠️ Ghi nhận ${observations.prolongedClosureCount} lần mắt nhắm kéo dài (lần lâu nhất: ${"%.1f".format(observations.longestClosedMs / 1000.0)}s)."
             }
-            else -> {
-                "🚨 CẢNH BÁO NGUY CƠ CAO: Ghi nhận ${observations.prolongedClosureCount} lần nhắm mắt kéo dài (lần lâu nhất: ${"%.1f".format(observations.longestClosedMs / 1000.0)}s). Tài xế có dấu hiệu ngủ gật lặp lại, khuyến nghị điều phối viên liên hệ và yêu cầu dừng xe nghỉ ngay!"
+            observations.prolongedClosureCount > 0 -> {
+                "Ghi nhận ${observations.prolongedClosureCount} lần nhắm mắt kéo dài (lần lâu nhất: ${"%.1f".format(observations.longestClosedMs / 1000.0)}s)."
             }
+            else -> "Cảnh báo đã được ghi nhận trong phiên quan sát."
         }
 
         val recommendations = when {

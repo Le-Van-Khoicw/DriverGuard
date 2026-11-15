@@ -20,32 +20,13 @@ import com.example.driverguard.core.location.GpsLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.osmdroid.config.Configuration
-import org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
-import org.osmdroid.util.MapTileIndex
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.CopyrightOverlay
 import org.osmdroid.views.overlay.Marker
 import java.util.Locale
-
-val GoogleRoadsTileSourceMini = object : OnlineTileSourceBase(
-    "GoogleRoads",
-    0, 20, 256, ".png",
-    arrayOf(
-        "https://mt0.google.com/vt/lyrs=m&hl=vi&x=",
-        "https://mt1.google.com/vt/lyrs=m&hl=vi&x=",
-        "https://mt2.google.com/vt/lyrs=m&hl=vi&x=",
-        "https://mt3.google.com/vt/lyrs=m&hl=vi&x="
-    )
-) {
-    override fun getTileURLString(pMapTileIndex: Long): String {
-        val zoom = MapTileIndex.getZoom(pMapTileIndex)
-        val x = MapTileIndex.getX(pMapTileIndex)
-        val y = MapTileIndex.getY(pMapTileIndex)
-        return baseUrl + x + "&y=" + y + "&z=" + zoom
-    }
-}
 
 /** Opens Google Navigation inside DriverGuard. Requires API key and Cloud billing. */
 fun openInAppNavigation(context: Context, address: String) {
@@ -57,7 +38,7 @@ fun openInAppNavigation(context: Context, address: String) {
  * Geocode địa chỉ văn bản thành toạ độ (vĩ độ, kinh độ).
  * Hỗ trợ nhận diện toạ độ từ link Google Maps, chuỗi toạ độ hoặc địa danh.
  */
-suspend fun resolveStopLocation(context: Context, address: String, fallbackIndex: Int): GeoPoint {
+suspend fun resolveStopLocation(context: Context, address: String): GeoPoint? {
     return withContext(Dispatchers.IO) {
         // 1. Tự động trích xuất toạ độ nếu địa chỉ chứa toạ độ hoặc link Google Maps (VD: q=10.7769,106.7009)
         val coordRegex = Regex("""(-?\d+\.\d+),\s*(-?\d+\.\d+)""")
@@ -82,24 +63,7 @@ suspend fun resolveStopLocation(context: Context, address: String, fallbackIndex
             // Geocoder service có thể không sẵn sàng trên một số máy ảo
         }
 
-        // Dự phòng thông minh theo địa danh có trong chuỗi địa chỉ
-        val lower = address.lowercase(Locale("vi", "VN"))
-        when {
-            lower.contains("nha trang") || lower.contains("khánh hòa") -> GeoPoint(12.2388, 109.1967)
-            lower.contains("đà nẵng") -> GeoPoint(16.0544, 108.2022)
-            lower.contains("hà nội") -> GeoPoint(21.0285, 105.8542)
-            lower.contains("cần thơ") -> GeoPoint(10.0452, 105.7469)
-            lower.contains("bình dương") || lower.contains("thủ dầu một") -> GeoPoint(10.9805, 106.6519)
-            lower.contains("đồng nai") || lower.contains("biên hòa") -> GeoPoint(10.9574, 106.8427)
-            lower.contains("vũng tàu") -> GeoPoint(10.3460, 107.0843)
-            lower.contains("quận 1") || lower.contains("bến thành") -> GeoPoint(10.7725, 106.6980)
-            lower.contains("thủ đức") -> GeoPoint(10.8500, 106.7720)
-            else -> {
-                val baseLat = 10.7769 + (fallbackIndex * 0.015)
-                val baseLon = 106.7009 + (fallbackIndex * 0.012)
-                GeoPoint(baseLat, baseLon)
-            }
-        }
+        null
     }
 }
 
@@ -121,11 +85,9 @@ fun TripMiniMap(
 
     // Phân giải toạ độ ngầm các điểm dừng
     LaunchedEffect(stops) {
-        val resolved = stops.mapIndexed { index, stop ->
-            val point = resolveStopLocation(context, stop.address, index)
-            Pair(stop, point)
+        stopCoordinates = stops.mapNotNull { stop ->
+            resolveStopLocation(context, stop.address)?.let { stop to it }
         }
-        stopCoordinates = resolved
     }
 
     Card(
@@ -168,11 +130,11 @@ fun TripMiniMap(
                     factory = { ctx ->
                         Configuration.getInstance().userAgentValue = "DriverGuard/1.0 (Android; Graduate Thesis Project)"
                         MapView(ctx).apply {
-                            setTileSource(GoogleRoadsTileSourceMini)
+                            setTileSource(TileSourceFactory.MAPNIK)
                             setMultiTouchControls(true)
                             isTilesScaledToDpi = true
                             controller.setZoom(13.5)
-                            val defaultCenter = if (currentGps != null && currentGps.latitude != 0.0) {
+                            val defaultCenter = if (currentGps != null) {
                                 GeoPoint(currentGps.latitude, currentGps.longitude)
                             } else {
                                 GeoPoint(10.7769, 106.7009)
@@ -185,13 +147,13 @@ fun TripMiniMap(
                         val allPoints = mutableListOf<GeoPoint>()
 
                         // 1. Marker vị trí xe hiện tại
-                        if (currentGps != null && currentGps.latitude != 0.0 && currentGps.longitude != 0.0) {
+                        if (currentGps != null) {
                             val carPoint = GeoPoint(currentGps.latitude, currentGps.longitude)
                             allPoints.add(carPoint)
                             val carMarker = Marker(mapView).apply {
                                 position = carPoint
                                 title = "Xe của bạn"
-                                snippet = "Vận tốc: ${currentGps.speedKmh?.toInt() ?: 0} km/h"
+                                snippet = "Vận tốc: ${currentGps.speedDisplay}"
                                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                             }
                             mapView.overlays.add(carMarker)
@@ -223,6 +185,7 @@ fun TripMiniMap(
                                 }
                             }
                         }
+                        mapView.overlays.add(CopyrightOverlay(mapView.context))
                         mapView.invalidate()
                     }
                 )

@@ -143,14 +143,9 @@ class DispatchViewModel(application: Application) : AndroidViewModel(application
         enqueue(operation("updateStop", trip, mapOf("stopId" to stop.id, "outcome" to outcome, "quantities" to quantities, "actualContact" to contact.trim(), "reason" to note.trim())))
     }
     fun finishTrip(trip: AssignedTrip, note: String) {
-        trip.stops.filter { it.status == "pending" }.forEach { stop ->
-            enqueue(operation("updateStop", trip, mapOf(
-                "stopId" to stop.id,
-                "outcome" to "full",
-                "quantities" to stop.items.map { it.quantity },
-                "actualContact" to stop.contact.ifBlank { "Người nhận" },
-                "reason" to "Tự động ghi nhận khi hoàn thành chuyến"
-            )))
+        if (trip.status != "in_progress" || trip.stops.any { it.status == "pending" }) {
+            _state.value = _state.value.copy(error = "Cần ghi kết quả cho tất cả điểm dừng trước khi hoàn thành chuyến.")
+            return
         }
         enqueue(operation("finishTrip", trip, mapOf("reason" to note.trim())))
     }
